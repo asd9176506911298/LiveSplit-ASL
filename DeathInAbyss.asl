@@ -187,8 +187,8 @@ split
 
 onReset
 {
-    vars.OldBoolValues.Clear();
     vars.OldIntValues.Clear();
     vars.LastStatePtr = IntPtr.Zero;
     current.BossActiveStateName = "";
 }
+
