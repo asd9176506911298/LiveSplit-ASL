@@ -1,55 +1,147 @@
-state("Webhead")
+state("Webhead") 
 {
-    // Loading state: 1 = Loading, 0 = In-Game
-    byte isLoadingEngine : "Engine.dll", 0x5F5908, 0x0;
-
-    // Current map file name
-    string64 mapName : "Engine.dll", 0x5EBCA0, 0x34, 0x14C, 0x0;
+    float TimeSeconds    : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x3E4;
+    uint Pauser          : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x468;
+    string64 mapName     : "Engine.dll", 0x5EBCA0, 0x34, 0x14C, 0x0;
+    
+    // 最終 BOSS Split 用的變數
+    int CurrentLevel     : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x438;
+    byte LevelComplete7  : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x488;
+    string128 GUIPageName: "Engine.dll", 0x4728D0, 0x38, 0x40, 0x64, 0x24C, 0x0;
 }
 
 startup
 {
-    refreshRate = 60;
+    if (timer.CurrentTimingMethod == TimingMethod.RealTime)
+    {
+        timer.CurrentTimingMethod = TimingMethod.GameTime;
+    }
+    
+    refreshRate = 120;
 }
 
 init
 {
-    print("--- Spider-Man 2 ASL Script Initialized ---");
+    vars.TotalGameTime = 0.0;
+    vars.LastGUIPageName = "";
+    vars.BossSplitTriggered = false;
+    
+    // 用來追蹤變化的變數
+    vars.LastCurrentLevel = -1;
+    vars.LastLevelComplete7 = -1;
+    vars.LastCleanedGUIPageName = "";
+    vars.LastCleanedMapName = "";
 }
 
 start
 {
-    string cur = (current.mapName ?? "").Trim().ToLower();
-    string oldM = (old.mapName ?? "").Trim().ToLower();
-
-    // TRIGGER START: When map changes from startup to cb3_citystreet
-    // This is the most reliable way to start when clicking 'New Game'
-    if (oldM.Contains("startup") && cur.Contains("cb3_citystreet"))
+    if (current.cleanedMap.Contains("cb3_citystreet") && old.cleanedMap.Contains("startup"))
     {
-        print("--- Start Triggered: Map changed from startup to " + cur + " ---");
+        vars.TotalGameTime = 0.0;
+        vars.BossSplitTriggered = false;
+        print(">>> TIMER STARTED <<<");
         return true;
     }
 }
 
+update
+{
+    current.cleanedMap = (current.mapName ?? "").Trim().ToLower();
+    current.cleanedGUIPageName = (current.GUIPageName ?? "").Trim().ToLower();
+    
+    // === 只在變化時印出 ===
+    if (current.cleanedMap != vars.LastCleanedMapName)
+    {
+        print(">>> mapName CHANGED: [" + vars.LastCleanedMapName + "] -> [" + current.cleanedMap + "]");
+        print("    (Raw: [" + (current.mapName ?? "NULL") + "])");
+        vars.LastCleanedMapName = current.cleanedMap;
+    }
+    
+    if (current.CurrentLevel != vars.LastCurrentLevel)
+    {
+        print(">>> CurrentLevel CHANGED: " + vars.LastCurrentLevel + " -> " + current.CurrentLevel);
+        vars.LastCurrentLevel = current.CurrentLevel;
+    }
+    
+    if (current.LevelComplete7 != vars.LastLevelComplete7)
+    {
+        print(">>> LevelComplete7 CHANGED: " + vars.LastLevelComplete7 + " -> " + current.LevelComplete7);
+        vars.LastLevelComplete7 = current.LevelComplete7;
+    }
+    
+    if (current.cleanedGUIPageName != vars.LastCleanedGUIPageName)
+    {
+        print(">>> GUIPageName CHANGED: [" + vars.LastCleanedGUIPageName + "] -> [" + current.cleanedGUIPageName + "]");
+        print("    (Raw: [" + (current.GUIPageName ?? "NULL") + "])");
+        vars.LastCleanedGUIPageName = current.cleanedGUIPageName;
+    }
+}
+
+gameTime
+{
+    bool isMenu = current.cleanedMap.Contains("startup") || current.cleanedMap == "";
+    
+    if (!isMenu)
+    {
+        if (current.TimeSeconds > old.TimeSeconds)
+        {
+            double delta = (double)(current.TimeSeconds - old.TimeSeconds);
+            if (delta < 1.0) 
+            {
+                vars.TotalGameTime += delta;
+            }
+        }
+        else if (current.TimeSeconds == old.TimeSeconds && current.Pauser != 0)
+        {
+            vars.TotalGameTime += (1.0 / refreshRate);
+        }
+        else if (current.TimeSeconds < old.TimeSeconds && current.TimeSeconds > 0 && current.TimeSeconds < 1.0)
+        {
+            vars.TotalGameTime += (double)current.TimeSeconds;
+        }
+    }
+
+    return TimeSpan.FromSeconds(vars.TotalGameTime);
+}
+
 split
 {
-    // Only split if the timer is already running
-    if (timer.CurrentPhase != TimerPhase.Running) return false;
-
-    string cur = (current.mapName ?? "").Trim().ToLower();
-    string oldM = (old.mapName ?? "").Trim().ToLower();
-
-    if (string.IsNullOrEmpty(cur) || string.IsNullOrEmpty(oldM)) return false;
-
-    // TRIGGER SPLIT: Whenever the map name changes
-    // EXCEPT:
-    // 1. When entering the first level (that's the Start)
-    // 2. When going back to startup/main menu
-    if (cur != oldM)
+    // === 最終 BOSS Split 條件檢查（只在接近條件時印出）===
+    if (current.CurrentLevel == 7 && current.LevelComplete7 == 1)
     {
-        if (!cur.Contains("cb3_citystreet") && !cur.Contains("startup"))
+        bool cond1 = !vars.BossSplitTriggered;
+        bool cond2 = current.CurrentLevel == 7;
+        bool cond3 = current.LevelComplete7 == 1;
+        bool cond4 = vars.LastGUIPageName.Contains("pagemissioncomplete");
+        bool cond5 = current.cleanedGUIPageName == "";
+        
+        /*
+        print("--- BOSS SPLIT CHECK ---");
+        print("  [" + (cond1 ? "✓" : "✗") + "] Not triggered yet");
+        print("  [" + (cond2 ? "✓" : "✗") + "] CurrentLevel == 7 (actual: " + current.CurrentLevel + ")");
+        print("  [" + (cond3 ? "✓" : "✗") + "] LevelComplete7 == 1 (actual: " + current.LevelComplete7 + ")");
+        print("  [" + (cond4 ? "✓" : "✗") + "] LastGUI has 'pagemissioncomplete' (actual: [" + vars.LastGUIPageName + "])");
+        print("  [" + (cond5 ? "✓" : "✗") + "] CurrentGUI is empty (actual: [" + current.cleanedGUIPageName + "])");
+        */
+        
+        if (cond1 && cond2 && cond3 && cond4 && cond5)
         {
-            print("--- Split Triggered: Map changed from " + oldM + " to " + cur + " ---");
+            print("!!! FINAL BOSS SPLIT TRIGGERED !!!");
+            vars.BossSplitTriggered = true;
+            return true;
+        }
+    }
+    
+    // 儲存上一幀的 GUI Page Name
+    vars.LastGUIPageName = current.cleanedGUIPageName;
+    
+    // === 一般關卡 Split ===
+    if (current.cleanedMap != old.cleanedMap && !string.IsNullOrEmpty(current.cleanedMap))
+    {
+        if (!current.cleanedMap.Contains("startup") &&  
+            !current.cleanedMap.Contains("cb3_citystreet"))
+        {
+            print("--- Level Split: [" + old.cleanedMap + "] -> [" + current.cleanedMap + "] ---");
             return true;
         }
     }
@@ -57,15 +149,5 @@ split
 
 isLoading
 {
-    // Pauses Game Time when isLoadingEngine is 1
-    return current.isLoadingEngine == 1;
-}
-
-update
-{
-    // Debug log to monitor map and loading transitions
-    if (current.mapName != old.mapName)
-    {
-        print("Map Change: [" + old.mapName + "] -> [" + current.mapName + "] | Loading State: " + current.isLoadingEngine);
-    }
+    return true; 
 }
