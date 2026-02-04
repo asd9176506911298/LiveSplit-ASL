@@ -6,6 +6,8 @@ state("Webhead")
     
     // 最終 BOSS Split 用的變數
     int CurrentLevel     : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x438;
+    int ArrayBase         : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C;
+    int LevelComplete1  : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C;
     byte LevelComplete7  : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x488;
     string128 GUIPageName: "Engine.dll", 0x4728D0, 0x38, 0x40, 0x64, 0x24C, 0x0;
 }
@@ -31,6 +33,7 @@ init
     vars.LastLevelComplete7 = -1;
     vars.LastCleanedGUIPageName = "";
     vars.LastCleanedMapName = "";
+    vars.LevelArrayPtr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
 }
 
 start
@@ -74,6 +77,21 @@ update
         print(">>> GUIPageName CHANGED: [" + vars.LastCleanedGUIPageName + "] -> [" + current.cleanedGUIPageName + "]");
         print("    (Raw: [" + (current.GUIPageName ?? "NULL") + "])");
         vars.LastCleanedGUIPageName = current.cleanedGUIPageName;
+    }
+
+    var ptr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
+    
+    // 2. 動態計算偏移並讀取值 (公式: 0x46C + CurrentLevel * 4)
+    int currentOffset = (current.CurrentLevel * 4);
+    
+    // 使用 Deref 讀取 int
+    // 如果讀取失敗會回傳預設值 0
+    current.LevelCompleteVal = ptr.Deref<int>(game, currentOffset);
+
+    // 監控變化
+    if (current.LevelCompleteVal != old.LevelCompleteVal)
+    {
+        print(">>> Level " + current.CurrentLevel + " Status: " + current.LevelCompleteVal);
     }
 }
 
@@ -136,14 +154,10 @@ split
     vars.LastGUIPageName = current.cleanedGUIPageName;
     
     // === 一般關卡 Split ===
-    if (current.cleanedMap != old.cleanedMap && !string.IsNullOrEmpty(current.cleanedMap))
+    if (old.LevelCompleteVal == 0 && current.LevelCompleteVal == 1)
     {
-        if (!current.cleanedMap.Contains("startup") &&  
-            !current.cleanedMap.Contains("cb3_citystreet"))
-        {
-            print("--- Level Split: [" + old.cleanedMap + "] -> [" + current.cleanedMap + "] ---");
-            return true;
-        }
+        print("--- SPLIT: Level " + current.CurrentLevel + " Complete! ---");
+        return true;
     }
 }
 
