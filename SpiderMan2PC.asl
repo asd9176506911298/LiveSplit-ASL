@@ -124,7 +124,10 @@ gameTime
 
 split
 {
-    // === 最終 BOSS Split 條件檢查（只在接近條件時印出）===
+    // === 檢查是否在選單 ===
+    bool isInMenu = current.cleanedMap.Contains("startup") || current.cleanedMap == "";
+    
+    // === 最終 BOSS Split ===
     if (current.CurrentLevel == 7 && current.LevelComplete7 == 1)
     {
         bool cond1 = !vars.BossSplitTriggered;
@@ -132,15 +135,6 @@ split
         bool cond3 = current.LevelComplete7 == 1;
         bool cond4 = vars.LastGUIPageName.Contains("pagemissioncomplete");
         bool cond5 = current.cleanedGUIPageName == "";
-        
-        /*
-        print("--- BOSS SPLIT CHECK ---");
-        print("  [" + (cond1 ? "✓" : "✗") + "] Not triggered yet");
-        print("  [" + (cond2 ? "✓" : "✗") + "] CurrentLevel == 7 (actual: " + current.CurrentLevel + ")");
-        print("  [" + (cond3 ? "✓" : "✗") + "] LevelComplete7 == 1 (actual: " + current.LevelComplete7 + ")");
-        print("  [" + (cond4 ? "✓" : "✗") + "] LastGUI has 'pagemissioncomplete' (actual: [" + vars.LastGUIPageName + "])");
-        print("  [" + (cond5 ? "✓" : "✗") + "] CurrentGUI is empty (actual: [" + current.cleanedGUIPageName + "])");
-        */
         
         if (cond1 && cond2 && cond3 && cond4 && cond5)
         {
@@ -150,11 +144,10 @@ split
         }
     }
     
-    // 儲存上一幀的 GUI Page Name
     vars.LastGUIPageName = current.cleanedGUIPageName;
     
-    // === 一般關卡 Split ===
-    if (old.LevelCompleteVal == 0 && current.LevelCompleteVal == 1)
+    // === 一般關卡 Split（新增選單檢查）===
+    if (!isInMenu && old.LevelCompleteVal == 0 && current.LevelCompleteVal == 1)
     {
         print("--- SPLIT: Level " + current.CurrentLevel + " Complete! ---");
         return true;
