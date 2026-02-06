@@ -27,6 +27,8 @@ init
     vars.TotalGameTime = 0.0;
     vars.LastGUIPageName = "";
     vars.BossSplitTriggered = false;
+    vars.LastSplitLevel = -1;  // 記錄上次 split 的關卡
+
     
     // 用來追蹤變化的變數
     vars.LastCurrentLevel = -1;
@@ -42,6 +44,7 @@ start
     {
         vars.TotalGameTime = 0.0;
         vars.BossSplitTriggered = false;
+        vars.LastSplitLevel = -1;  // 重置
         print(">>> TIMER STARTED <<<");
         return true;
     }
@@ -79,14 +82,31 @@ update
         vars.LastCleanedGUIPageName = current.cleanedGUIPageName;
     }
 
-    var ptr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
-    
-    // 2. 動態計算偏移並讀取值 (公式: 0x46C + CurrentLevel * 4)
-    int currentOffset = (current.CurrentLevel * 4);
-    
-    // 使用 Deref 讀取 int
-    // 如果讀取失敗會回傳預設值 0
-    current.LevelCompleteVal = ptr.Deref<int>(game, currentOffset);
+        // 1. 指標走到陣列基址 (0x58C)
+    var basePtr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
+
+    // 2. 取得基址後加上動態偏移
+    IntPtr baseAddress;
+    if (basePtr.DerefOffsets(game, out baseAddress))
+    {
+        // 3. 計算動態偏移: 0x46C + (CurrentLevel * 4)
+        int dynamicOffset = (current.CurrentLevel * 4);
+        
+        // 4. 讀取值
+        int value;
+        if (game.ReadValue<int>(baseAddress + dynamicOffset, out value))
+        {
+            current.LevelCompleteVal = value;
+        }
+        else
+        {
+            current.LevelCompleteVal = 0; // 讀取失敗時的預設值
+        }
+    }
+    else
+    {
+        current.LevelCompleteVal = 0; // 無法取得基址時的預設值
+    }
 
     // 監控變化
     if (current.LevelCompleteVal != old.LevelCompleteVal)
@@ -146,10 +166,28 @@ split
     
     vars.LastGUIPageName = current.cleanedGUIPageName;
     
-    // === 一般關卡 Split（新增選單檢查）===
-    if (!isInMenu && old.LevelCompleteVal == 0 && current.LevelCompleteVal == 1)
+    // === Level 0 教學關 Split（特殊處理）===
+    if (current.CurrentLevel == 0 && 
+        current.cleanedMap.Contains("cb3_citystreet") &&  // 只在教學關地圖
+        current.CurrentLevel != vars.LastSplitLevel &&
+        old.LevelCompleteVal == 0 && 
+        current.LevelCompleteVal == 1)
+    {
+        print("--- SPLIT: Level 0 (Tutorial) Complete! ---");
+        vars.LastSplitLevel = 0;
+        return true;
+    }
+    
+    // === 一般關卡 Split（Level 1-7）===
+    if (!isInMenu && 
+        current.CurrentLevel > 0 &&  // 排除其他 Level 0 情況
+        current.CurrentLevel != 7 &&
+        current.CurrentLevel != vars.LastSplitLevel &&
+        old.LevelCompleteVal == 0 && 
+        current.LevelCompleteVal == 1)
     {
         print("--- SPLIT: Level " + current.CurrentLevel + " Complete! ---");
+        vars.LastSplitLevel = current.CurrentLevel;
         return true;
     }
 }
