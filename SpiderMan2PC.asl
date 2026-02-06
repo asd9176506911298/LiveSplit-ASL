@@ -6,8 +6,6 @@ state("Webhead")
     
     // 最終 BOSS Split 用的變數
     int CurrentLevel     : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x438;
-    int ArrayBase         : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C;
-    int LevelComplete1  : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C;
     byte LevelComplete7  : "Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x488;
     string128 GUIPageName: "Engine.dll", 0x4728D0, 0x38, 0x40, 0x64, 0x24C, 0x0;
 }
@@ -19,7 +17,7 @@ startup
         timer.CurrentTimingMethod = TimingMethod.GameTime;
     }
     
-    refreshRate = 120;
+    refreshRate = 60;
 }
 
 init
@@ -27,15 +25,12 @@ init
     vars.TotalGameTime = 0.0;
     vars.LastGUIPageName = "";
     vars.BossSplitTriggered = false;
-    vars.LastSplitLevel = -1;  // 記錄上次 split 的關卡
-
     
     // 用來追蹤變化的變數
     vars.LastCurrentLevel = -1;
     vars.LastLevelComplete7 = -1;
     vars.LastCleanedGUIPageName = "";
     vars.LastCleanedMapName = "";
-    vars.LevelArrayPtr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
 }
 
 start
@@ -44,7 +39,6 @@ start
     {
         vars.TotalGameTime = 0.0;
         vars.BossSplitTriggered = false;
-        vars.LastSplitLevel = -1;  // 重置
         print(">>> TIMER STARTED <<<");
         return true;
     }
@@ -81,38 +75,6 @@ update
         print("    (Raw: [" + (current.GUIPageName ?? "NULL") + "])");
         vars.LastCleanedGUIPageName = current.cleanedGUIPageName;
     }
-
-        // 1. 指標走到陣列基址 (0x58C)
-    var basePtr = new DeepPointer("Engine.dll", 0x5EBCA0, 0x34, 0x118, 0x38, 0x0, 0x548, 0x58C, 0x46C);
-
-    // 2. 取得基址後加上動態偏移
-    IntPtr baseAddress;
-    if (basePtr.DerefOffsets(game, out baseAddress))
-    {
-        // 3. 計算動態偏移: 0x46C + (CurrentLevel * 4)
-        int dynamicOffset = (current.CurrentLevel * 4);
-        
-        // 4. 讀取值
-        int value;
-        if (game.ReadValue<int>(baseAddress + dynamicOffset, out value))
-        {
-            current.LevelCompleteVal = value;
-        }
-        else
-        {
-            current.LevelCompleteVal = 0; // 讀取失敗時的預設值
-        }
-    }
-    else
-    {
-        current.LevelCompleteVal = 0; // 無法取得基址時的預設值
-    }
-
-    // 監控變化
-    if (current.LevelCompleteVal != old.LevelCompleteVal)
-    {
-        print(">>> Level " + current.CurrentLevel + " Status: " + current.LevelCompleteVal);
-    }
 }
 
 gameTime
@@ -144,10 +106,7 @@ gameTime
 
 split
 {
-    // === 檢查是否在選單 ===
-    bool isInMenu = current.cleanedMap.Contains("startup") || current.cleanedMap == "";
-    
-    // === 最終 BOSS Split ===
+    // === 最終 BOSS Split 條件檢查（只在接近條件時印出）===
     if (current.CurrentLevel == 7 && current.LevelComplete7 == 1)
     {
         bool cond1 = !vars.BossSplitTriggered;
@@ -155,6 +114,15 @@ split
         bool cond3 = current.LevelComplete7 == 1;
         bool cond4 = vars.LastGUIPageName.Contains("pagemissioncomplete");
         bool cond5 = current.cleanedGUIPageName == "";
+        
+        /*
+        print("--- BOSS SPLIT CHECK ---");
+        print("  [" + (cond1 ? "✓" : "✗") + "] Not triggered yet");
+        print("  [" + (cond2 ? "✓" : "✗") + "] CurrentLevel == 7 (actual: " + current.CurrentLevel + ")");
+        print("  [" + (cond3 ? "✓" : "✗") + "] LevelComplete7 == 1 (actual: " + current.LevelComplete7 + ")");
+        print("  [" + (cond4 ? "✓" : "✗") + "] LastGUI has 'pagemissioncomplete' (actual: [" + vars.LastGUIPageName + "])");
+        print("  [" + (cond5 ? "✓" : "✗") + "] CurrentGUI is empty (actual: [" + current.cleanedGUIPageName + "])");
+        */
         
         if (cond1 && cond2 && cond3 && cond4 && cond5)
         {
@@ -164,31 +132,17 @@ split
         }
     }
     
+    // 儲存上一幀的 GUI Page Name
     vars.LastGUIPageName = current.cleanedGUIPageName;
     
-    // === Level 0 教學關 Split（特殊處理）===
-    if (current.CurrentLevel == 0 && 
-        current.cleanedMap.Contains("cb3_citystreet") &&  // 只在教學關地圖
-        current.CurrentLevel != vars.LastSplitLevel &&
-        old.LevelCompleteVal == 0 && 
-        current.LevelCompleteVal == 1)
+    // === 一般關卡 Split ===
+    if (current.cleanedMap != old.cleanedMap && !string.IsNullOrEmpty(current.cleanedMap))
     {
-        print("--- SPLIT: Level 0 (Tutorial) Complete! ---");
-        vars.LastSplitLevel = 0;
-        return true;
-    }
-    
-    // === 一般關卡 Split（Level 1-7）===
-    if (!isInMenu && 
-        current.CurrentLevel > 0 &&  // 排除其他 Level 0 情況
-        current.CurrentLevel != 7 &&
-        current.CurrentLevel != vars.LastSplitLevel &&
-        old.LevelCompleteVal == 0 && 
-        current.LevelCompleteVal == 1)
-    {
-        print("--- SPLIT: Level " + current.CurrentLevel + " Complete! ---");
-        vars.LastSplitLevel = current.CurrentLevel;
-        return true;
+        if (!current.cleanedMap.Contains("startup"))
+        {
+            print("--- Level Split: [" + old.cleanedMap + "] -> [" + current.cleanedMap + "] ---");
+            return true;
+        }
     }
 }
 
