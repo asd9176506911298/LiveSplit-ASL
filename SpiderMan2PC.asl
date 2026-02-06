@@ -39,7 +39,7 @@ start
     {
         vars.TotalGameTime = 0.0;
         vars.BossSplitTriggered = false;
-        print(">>> TIMER STARTED <<<");
+        //print(">>> TIMER STARTED <<<");
         return true;
     }
 }
@@ -52,27 +52,27 @@ update
     // === 只在變化時印出 ===
     if (current.cleanedMap != vars.LastCleanedMapName)
     {
-        print(">>> mapName CHANGED: [" + vars.LastCleanedMapName + "] -> [" + current.cleanedMap + "]");
-        print("    (Raw: [" + (current.mapName ?? "NULL") + "])");
+        //print(">>> mapName CHANGED: [" + vars.LastCleanedMapName + "] -> [" + current.cleanedMap + "]");
+        //print("    (Raw: [" + (current.mapName ?? "NULL") + "])");
         vars.LastCleanedMapName = current.cleanedMap;
     }
     
     if (current.CurrentLevel != vars.LastCurrentLevel)
     {
-        print(">>> CurrentLevel CHANGED: " + vars.LastCurrentLevel + " -> " + current.CurrentLevel);
+        //print(">>> CurrentLevel CHANGED: " + vars.LastCurrentLevel + " -> " + current.CurrentLevel);
         vars.LastCurrentLevel = current.CurrentLevel;
     }
     
     if (current.LevelComplete7 != vars.LastLevelComplete7)
     {
-        print(">>> LevelComplete7 CHANGED: " + vars.LastLevelComplete7 + " -> " + current.LevelComplete7);
+        //print(">>> LevelComplete7 CHANGED: " + vars.LastLevelComplete7 + " -> " + current.LevelComplete7);
         vars.LastLevelComplete7 = current.LevelComplete7;
     }
     
     if (current.cleanedGUIPageName != vars.LastCleanedGUIPageName)
     {
-        print(">>> GUIPageName CHANGED: [" + vars.LastCleanedGUIPageName + "] -> [" + current.cleanedGUIPageName + "]");
-        print("    (Raw: [" + (current.GUIPageName ?? "NULL") + "])");
+        //print(">>> GUIPageName CHANGED: [" + vars.LastCleanedGUIPageName + "] -> [" + current.cleanedGUIPageName + "]");
+        //print("    (Raw: [" + (current.GUIPageName ?? "NULL") + "])");
         vars.LastCleanedGUIPageName = current.cleanedGUIPageName;
     }
 }
@@ -126,7 +126,7 @@ split
         
         if (cond1 && cond2 && cond3 && cond4 && cond5)
         {
-            print("!!! FINAL BOSS SPLIT TRIGGERED !!!");
+            //print("!!! FINAL BOSS SPLIT TRIGGERED !!!");
             vars.BossSplitTriggered = true;
             return true;
         }
@@ -140,6 +140,12 @@ split
     {
         if (!current.cleanedMap.Contains("startup"))
         {
+            // 排除 wharf_train.whr -> wharf_train 的情況
+            if (old.cleanedMap == "wharf_train.whr" && current.cleanedMap == "wharf_train")
+            {
+                return false;
+            }
+            
             print("--- Level Split: [" + old.cleanedMap + "] -> [" + current.cleanedMap + "] ---");
             return true;
         }
