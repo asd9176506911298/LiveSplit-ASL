@@ -5,33 +5,24 @@ state("Doriano")
 
 startup 
 {
-    Assembly.Load(File.ReadAllBytes("Components/asl-help")).CreateInstance("Unity");
     Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
-
-    vars.Helper.LoadSceneManager = true;
-    vars.Helper.GameName = "Doriano";
-    vars.Helper.AlertLoadless();
+    vars.Uhara.AlertLoadless();
 }
 
 init
 {
     var Instance = vars.Uhara.CreateTool("Unity", "DotNet", "Instance");
+    vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
 
-    Instance.Watch<IntPtr>("PlayState", "ExternalCutsceneManager","endingDirector","0x10","0x88");
-
-    vars.Helper.TryLoad = (Func<dynamic, bool>)(mono =>
-    {
-        vars.Helper["collectedNum"] = mono.Make<int>("GameManager","currentGameManager","collectedItems",0x18);
-
-        return true;
-    });
+    Instance.Watch<IntPtr>("PlayState", "ExternalCutsceneManager","endingDirector","0x10","0x88"); // m_CachedPtr -> m_Graph when play will not null
+    Instance.Watch<int>("collectedNum", "GameManager","currentGameManager","collectedItems","0x18"); // collectedItems->Size
 }
 
 update
 {
     vars.Uhara.Update();
     
-    current.activeScene = vars.Helper.Scenes.Active.Name ?? current.activeScene;
+    current.activeScene = vars.Utils.GetActiveSceneName() ?? current.activeScene;
 }
 
 start
