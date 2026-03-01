@@ -41,23 +41,42 @@ update
     {
         vars.Frozen = true;
         vars.MapChanged = false;
-        // print("Frozen at: " + vars.LastIGT.ToString());
+        print("Frozen at: " + vars.LastIGT.ToString());
     }
 
     if (current.Map != old.Map && old.Map != null && old.Map != "")
     {
-        vars.AccumulatedTime += vars.LastIGT;
-        vars.LastIGT = 0.0;
-        vars.MapChanged = true;
-        // print("Map changed! Accumulated: " + vars.AccumulatedTime.ToString());
+        // Entering L_EndScreen: accumulate time and freeze (handles E2M5 "press any button" prompt)
+        if (current.Map == "L_EndScreen")
+        {
+            vars.AccumulatedTime += vars.LastIGT;
+            vars.LastIGT = 0.0;
+            vars.Frozen = true;
+            vars.MapChanged = true;
+            print("Entering EndScreen, frozen. Accumulated: " + vars.AccumulatedTime.ToString());
+        }
+        // Leaving L_EndScreen: skip accumulation, time was already added on entry
+        else if (old.Map == "L_EndScreen")
+        {
+            vars.LastIGT = 0.0;
+            vars.MapChanged = true;
+            print("Leaving EndScreen, skipping accumulation. Old Accumulated: " + vars.AccumulatedTime.ToString());
+        }
+        else
+        {
+            vars.AccumulatedTime += vars.LastIGT;
+            vars.LastIGT = 0.0;
+            vars.MapChanged = true;
+            print("Map changed! Accumulated: " + vars.AccumulatedTime.ToString());
+        }
+        print("Old Map: " + old.Map + " New Map: " + current.Map);
     }
 
-    // When CutSceneManager begin Player Press any key Unfrozen
     if (vars.MapChanged && vars.Resolver.CheckFlag("start"))
     {
         vars.Frozen = false;
         vars.MapChanged = false;
-        // print("Unfrozen, new level started");
+        print("Unfrozen, new level started");
     }
 
     if (!vars.Frozen && current.IGT > 0.0)
@@ -68,6 +87,13 @@ update
 
 split
 {
+    // E2M5: split when entering L_EndScreen instead of relying on BP_EndScreen_C::ReceiveBeginPlay
+    if (current.Map != old.Map && current.Map == "L_EndScreen")
+    {
+        // print("Split triggered via EndScreen map");
+        return true;
+    }
+
     if (vars.Resolver.CheckFlag("finish"))
     {
         // print("Split triggered");
