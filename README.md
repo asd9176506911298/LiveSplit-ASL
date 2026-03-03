@@ -1,6 +1,6 @@
 # LiveSplit-ASL
 
-# Componment
+# Component
 
 https://github.com/ru-mii/uhara/tree/main/bin
 
