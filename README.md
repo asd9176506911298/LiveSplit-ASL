@@ -1,5 +1,17 @@
 # LiveSplit-ASL
 
+# Componment
+
+https://github.com/ru-mii/uhara/tree/main/bin
+
+https://github.com/just-ero/asl-help/tree/main/lib
+
+put to LiveSplit_1.x.xx\Components\
+
+will seen LiveSplit_1.x.xx\Components\uhara10 or LiveSplit_1.x.xx\Components\asl-help
+
+# Game Link
+
 https://store.steampowered.com/app/3910680/INARI/
 
 https://store.steampowered.com/app/250380/Knockknock/
