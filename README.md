@@ -15,3 +15,5 @@ https://guilhermesgama.itch.io/doriano
 https://store.steampowered.com/app/4100940/Poppy_Playtime__Chapter_5/
 
 https://store.steampowered.com/app/2610650/Dont_Stop_Girlypop/
+
+https://store.steampowered.com/app/4069520/Super_Battle_Golf/
