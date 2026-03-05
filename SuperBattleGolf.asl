@@ -3,7 +3,6 @@ state("Super Battle Golf") {}
 startup
 {
     Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
-    vars.Uhara.AlertLoadless();
 }
 
 init
@@ -80,3 +79,4 @@ split
         return true;
     }
 }
+
