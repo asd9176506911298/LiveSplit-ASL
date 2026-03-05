@@ -26,9 +26,6 @@ init
     vars.Resolver.Watch<int>("ballDispensed", hBallDispenser);
     vars.Resolver.Watch<int>("ballHit", hGolfBall);
     vars.Resolver.Watch<int>("ballHoled", hGolfHole);
-
-    // Watch for scene transition flag in BNetworkManager to handle loading state
-    vars.Instance.Watch<bool>("isChangingScene", "GameAssembly::BNetworkManager", "isChangingScene");
 }
 
 update
@@ -49,9 +46,6 @@ update
 
     if (current.ballHoled != old.ballHoled)
         vars.Uhara.Log("Event: Ball in Hole (Count: " + current.ballHoled + ")");
-
-    if (current.isChangingScene != old.isChangingScene)
-        vars.Uhara.Log("Event: Scene Changing: " + current.isChangingScene);
     */
 }
 
@@ -85,10 +79,4 @@ split
         // vars.Uhara.Log("Split: Goal reached!");
         return true;
     }
-}
-
-isLoading
-{
-    // Pause the Game Time timer during scene transitions
-    return current.isChangingScene;
 }
