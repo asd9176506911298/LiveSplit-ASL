@@ -15,10 +15,10 @@ init
     vars.JitSave.SetOuter("GameAssembly.dll", "");
 
     IntPtr hBallDispenser = vars.JitSave.AddFlag("BallDispenser", "LocalPlayerInteract");
-    IntPtr hGolfBall     = vars.JitSave.AddFlag("GolfBall", "OnWasHitByGolfSwing");
-    IntPtr hGolfHole     = vars.JitSave.AddFlag("GolfHole", "ServerInformFellIn");
-    IntPtr hCancelMatch  = vars.JitSave.AddFlag("CourseManager", "EndCourse");
-    IntPtr hStartMatch   = vars.JitSave.AddFlag("MatchSetupMenu", "StartOrCancelMatch");
+    IntPtr hGolfBall      = vars.JitSave.AddFlag("GolfBall", "OnWasHitByGolfSwing");
+    IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "ServerInformFellIn");
+    IntPtr hCancelMatch   = vars.JitSave.AddFlag("CourseManager", "EndCourse");
+    IntPtr hStartMatch    = vars.JitSave.AddFlag("MatchSetupMenu", "StartOrCancelMatch");
 
     vars.JitSave.ProcessQueue();
 
@@ -87,3 +87,4 @@ isLoading
     // Pause the Game Time timer during scene transitions
     return current.isChangingScene;
 }
+
