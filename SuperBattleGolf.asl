@@ -3,6 +3,7 @@ state("Super Battle Golf") {}
 startup
 {
     Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
+    vars.Uhara.AlertLoadless();
 }
 
 init
@@ -28,6 +29,7 @@ init
     vars.Resolver.Watch<int>("startReset",    hStartMatch);
 
     vars.Instance.Watch<bool>("isExitingToMainMenu", "GameAssembly::GameManager", "isExitingToMainMenu");
+    vars.Instance.Watch<bool>("isChangingScene", "GameAssembly::BNetworkManager", "isChangingScene");
 }
 
 update
@@ -78,4 +80,10 @@ reset
     }
 
     return false;
+}
+
+isLoading
+{
+    // Pause the Game Time timer during scene transitions
+    return current.isChangingScene;
 }
