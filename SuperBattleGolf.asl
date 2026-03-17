@@ -15,7 +15,6 @@ init
     vars.JitSave.SetOuter("GameAssembly.dll", "");
 
     IntPtr hBallDispenser = vars.JitSave.AddFlag("BallDispenser", "LocalPlayerInteract");
-    IntPtr hGolfBall      = vars.JitSave.AddFlag("GolfBall", "OnWasHitByGolfSwing");
     IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "ServerInformFellIn");
     IntPtr hCancelMatch   = vars.JitSave.AddFlag("CourseManager", "EndCourse");
     IntPtr hStartMatch    = vars.JitSave.AddFlag("MatchSetupMenu", "StartOrCancelMatch");
@@ -23,13 +22,13 @@ init
     vars.JitSave.ProcessQueue();
 
     vars.Resolver.Watch<int>("ballDispensed", hBallDispenser);
-    vars.Resolver.Watch<int>("ballHit",       hGolfBall);
     vars.Resolver.Watch<int>("ballHoled",     hGolfHole);
     vars.Resolver.Watch<int>("cancelReset",   hCancelMatch);
     vars.Resolver.Watch<int>("startReset",    hStartMatch);
 
     vars.Instance.Watch<bool>("isExitingToMainMenu", "GameAssembly::GameManager", "isExitingToMainMenu");
     vars.Instance.Watch<bool>("isChangingScene", "GameAssembly::BNetworkManager", "isChangingScene");
+    vars.Instance.Watch<int>("MatchState", "GameAssembly::CourseManager", "matchState");
 }
 
 update
@@ -43,7 +42,7 @@ start
     if (current.activeScene == "Driving range")
         return current.ballDispensed != old.ballDispensed;
 
-    return current.ballHit != old.ballHit;
+    return old.MatchState != 3 && current.MatchState == 3;
 }
 
 split
@@ -87,4 +86,3 @@ isLoading
     // Pause the Game Time timer during scene transitions
     return current.isChangingScene;
 }
-
