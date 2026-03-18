@@ -15,7 +15,7 @@ init
     vars.JitSave.SetOuter("GameAssembly.dll", "");
 
     IntPtr hBallDispenser = vars.JitSave.AddFlag("BallDispenser", "LocalPlayerInteract");
-    IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "ServerInformFellIn");
+    IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "<ServerInformFellIn>g__HandleBall|20_0");
     IntPtr hCancelMatch   = vars.JitSave.AddFlag("CourseManager", "EndCourse");
     IntPtr hStartMatch    = vars.JitSave.AddFlag("MatchSetupMenu", "StartOrCancelMatch");
 
