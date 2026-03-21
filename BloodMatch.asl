@@ -4,22 +4,12 @@ state("Game")
     byte startFlag: "Game.exe", 0x53EF7C, 0x29;
     float loadTimer: "Game.exe", 0x53EF78, 0x8;
     float startTimer: "Game.exe", 0x53EF7C, 0x2C; 
+    byte winFlag: "Game.exe", 0x53EF6C, 0x5A4;
 }
 
-init
+startup
 {
-    // 建立一個紀錄已訪問地圖的清單
-    vars.visitedMaps = new List<string>();
-}
-
-onStart
-{
-    // 重置紀錄
-    vars.visitedMaps.Clear();
-    if (current.mapName != null)
-    {
-        vars.visitedMaps.Add(current.mapName);
-    }
+    settings.Add("FinaleSplit", false, "Only Split On Finale");
 }
 
 update
@@ -41,32 +31,15 @@ start
 
 split
 {
-    // 只有在地圖名稱改變且不為空時才判斷
-    if (old.mapName != current.mapName && !string.IsNullOrEmpty(current.mapName))
+    if (old.winFlag == 0 && current.winFlag == 1)
     {
-        // 1. 排除進出死亡地圖
-        if (current.mapName == "Data/Maps/DeathMap.eem" || old.mapName == "Data/Maps/DeathMap.eem")
+        // If the setting is ON, we ONLY split if we are on the Finale map
+        if (settings["FinaleSplit"])
         {
-            return false; 
+            return current.mapName == "Data/Maps/Finale.eem";
         }
 
-        // 2. 關鍵條件：只有地圖名稱包含 "Match" 才允許 Split
-        if (!current.mapName.Contains("Match"))
-        {
-            print(">>> IGNORED: [" + current.mapName + "] is not a Match map. <<<");
-            return false;
-        }
-
-        // 3. 檢查是否是重複的地圖（死掉重跑）
-        if (vars.visitedMaps.Contains(current.mapName))
-        {
-            print(">>> REPLAY DETECTED: [" + current.mapName + "] already split. <<<");
-            return false;
-        }
-
-        // 4. 通過以上所有檢查，紀錄並執行 Split
-        vars.visitedMaps.Add(current.mapName);
-        print(">>> MATCH SPLIT: [" + current.mapName + "] <<<");
+        // If the setting is OFF, we split on every winFlag transition (any map)
         return true;
     }
 }
