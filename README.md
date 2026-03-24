@@ -31,3 +31,5 @@ https://store.steampowered.com/app/2610650/Dont_Stop_Girlypop/
 https://store.steampowered.com/app/4069520/Super_Battle_Golf/
 
 https://cryptborn-games.itch.io/missing-entity
+
+https://store.steampowered.com/app/3290690/Styx_Blades_of_Greed/
