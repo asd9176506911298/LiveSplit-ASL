@@ -2,8 +2,6 @@ state("lucid-blocks"){}
 
 startup
 {
-    Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
-
     // Godot 4.6 Double Precision Version Offsets not sure all correct Yuki.kaco
     // SceneTree
     vars.SCENETREE_ROOT_WINDOW_OFFSET        = 0x328; // Window* f                          SceneTree::root
