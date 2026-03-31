@@ -2,7 +2,9 @@ state("lucid-blocks"){}
 
 startup
 {
-    // Godot 4.6 Double Precision Version Offsets not sure all correct Yuki.kaco
+    // Godot 4.6 Double Precision Version Offsets not sure all correct by Yuki.kaco
+    // Reference Micrologist's ASL Code https://raw.githubusercontent.com/Micrologist/LiveSplit.Bloodthief/refs/heads/main/BloodthiefDemo.asl
+
     // SceneTree
     vars.SCENETREE_ROOT_WINDOW_OFFSET        = 0x328; // Window* f                          SceneTree::root
     vars.SCENETREE_CURRENT_SCENE_OFFSET      = 0x830; // Node*   f                          SceneTree::current_scene
@@ -55,31 +57,6 @@ init
         return sb.ToString();
     });
 
-    Func<IntPtr, Dictionary<string, int>> GetMemberOffsets = (script) =>
-    {
-        var result = new Dictionary<string, int>();
-        var memberPtr     = game.ReadValue<IntPtr>((IntPtr)(script + vars.GDSCRIPT_MEMBER_MAP_OFFSET));
-        var lastMemberPtr = game.ReadValue<IntPtr>((IntPtr)(script + vars.GDSCRIPT_MEMBER_MAP_OFFSET + 0x8));
-        int memberSize = 0x18;
-        
-        while (memberPtr != IntPtr.Zero)
-        {
-            var namePtr = game.ReadValue<IntPtr>(memberPtr + 0x10);
-            string memberName = vars.ReadStringName(namePtr);
-
-            var index = game.ReadValue<int>(memberPtr + 0x18);
-            print("Ptr: " + memberPtr.ToString("X") + " Name:  " + memberName +" index: "+ index + " offsets: " + (index * memberSize + 0x8).ToString("X"));
-            result[memberName] = index * memberSize + 0x8;
-
-            if (memberPtr == lastMemberPtr)
-                break;
-
-            memberPtr = game.ReadValue<IntPtr>(memberPtr);
-        }
-
-        return result;
-    };
-
     vars.FindChild = (Func<IntPtr, string, IntPtr>)((node, targetName) =>
     {
         var count    = game.ReadValue<int>   ((IntPtr)(node + vars.NODE_CHILDREN_OFFSET));
@@ -102,8 +79,6 @@ init
 
     var sceneTree      = game.ReadValue<IntPtr>((IntPtr)(sceneTreePtr));
     var rootWindow     = game.ReadValue<IntPtr>((IntPtr)(sceneTree  + vars.SCENETREE_ROOT_WINDOW_OFFSET));
-    var childCount     = game.ReadValue<int>   ((IntPtr)(rootWindow + vars.NODE_CHILDREN_OFFSET));
-    var childArrayPtr  = game.ReadValue<IntPtr>((IntPtr)(rootWindow + vars.NODE_CHILDREN_OFFSET + 0x8));
 
     var main            = vars.FindChild(rootWindow,     "Main");
     var ui              = vars.FindChild(main,           "UI");
