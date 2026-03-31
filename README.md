@@ -37,3 +37,5 @@ https://cryptborn-games.itch.io/missing-enitiy-chapter-2
 https://store.steampowered.com/app/3290690/Styx_Blades_of_Greed
 
 https://store.steampowered.com/app/1588550/Cairn
+
+https://store.steampowered.com/app/3495730/Lucid_Blocks
