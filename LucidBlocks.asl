@@ -17,14 +17,15 @@ startup
     // GDScriptInstance
     vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET    = 0x018; // Ref<GDScript>   nochange                  GDScriptInstance::script
     vars.SCRIPTINSTANCE_MEMBERS_OFFSET       = 0x028; // Vector<Variant> nochange                  GDScriptInstance::members
+    // 0x50 ?
 
     // GDScript
-    vars.GDSCRIPT_MEMBER_MAP_OFFSET          = 0x1C8; // HashMap<StringName, MemberInfo> f  GDScript::member_indices
+    vars.GDSCRIPT_MEMBER_MAP_OFFSET          = 0x1B8; // HashMap<StringName, MemberInfo> f  GDScript::member_indices
 
     // CanvasLayer Didn't use so not check is correct
     // vars.CANVASLAYER_VISIBLE_OFFSET          = 0x454; // bool                              CanvasLayer::visible
 
-    // CharacterBody3D Didn't use so not check is correc
+    // CharacterBody3D Didn't use so not check is correct
     // vars.CHARACTERBODY3D_VELOCITY_OFFSET     = 0x648; // Vector3                           CharacterBody3D::velocity
 }
 
@@ -77,6 +78,10 @@ init
     var sceneTreeTrg = new SigScanTarget(3, "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? E8 ?? ?? ?? ?? 84 C0 74 ?? 40 B6") { OnFound = (p, s, ptr) => ptr + 0x4 + game.ReadValue<int>(ptr) };
     var sceneTreePtr = scn.Scan(sceneTreeTrg);
 
+    vars.sceneTreePtr = sceneTreePtr;
+    vars.yhvh = IntPtr.Zero; // 先設為零，等 update 去找
+
+
     var sceneTree      = game.ReadValue<IntPtr>((IntPtr)(sceneTreePtr));
     var rootWindow     = game.ReadValue<IntPtr>((IntPtr)(sceneTree  + vars.SCENETREE_ROOT_WINDOW_OFFSET));
 
@@ -91,6 +96,8 @@ init
     vars.createButton     = createButton;
     vars.prevCreateButton = 0;
 
+    vars.prevYhvhDead = 0;
+
     print("CreateButton: " + createButton.ToString("X"));
 }
 
@@ -99,5 +106,43 @@ start
     var pressed = game.ReadValue<byte>((IntPtr)(vars.createButton + 0x8D8));
     bool shouldStart = pressed == 1 && vars.prevCreateButton == 0;
     vars.prevCreateButton = pressed;
+
+    if (shouldStart)
+    {
+        vars.yhvh = IntPtr.Zero;
+        vars.prevYhvhDead = 0;
+    }
+
     return shouldStart;
+}
+update
+{
+    // 還沒抓到 Yhvh 就每幀嘗試
+    if (vars.yhvh == IntPtr.Zero)
+    {
+        var sceneTree  = game.ReadValue<IntPtr>((IntPtr)(vars.sceneTreePtr));
+        var rootWindow = game.ReadValue<IntPtr>((IntPtr)(sceneTree + vars.SCENETREE_ROOT_WINDOW_OFFSET));
+        var main        = vars.FindChild(rootWindow,  "Main");
+        var bossManager = vars.FindChild(main,        "BossManager");
+        var yhvh        = vars.FindChild(bossManager, "Yhvh");
+
+        if (yhvh != IntPtr.Zero)
+        {
+            vars.yhvh = yhvh;
+            print("Yhvh found: " + yhvh.ToString("X"));
+        }
+    }
+}
+
+split
+{
+    if (vars.yhvh == IntPtr.Zero) return false;
+
+    var yhvhInstance = game.ReadValue<IntPtr>((IntPtr)(vars.yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    var yhvhMember   = game.ReadValue<IntPtr>((IntPtr)(yhvhInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
+    var yhvhDead     = game.ReadValue<byte>  ((IntPtr)(yhvhMember + 0xA80));
+
+    bool shouldSplit = yhvhDead == 1 && vars.prevYhvhDead == 0;
+    vars.prevYhvhDead = yhvhDead;
+    return shouldSplit;
 }
