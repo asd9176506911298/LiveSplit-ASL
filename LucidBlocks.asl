@@ -58,6 +58,33 @@ init
         return sb.ToString();
     });
 
+    vars.GetMemberOffsets = (Func<IntPtr, Dictionary<string, int>>)((script) =>
+    {
+        var result = new Dictionary<string, int>();
+        int memberSize = 0x28;
+
+        var mapBase = game.ReadValue<IntPtr>((IntPtr)(script + vars.GDSCRIPT_MEMBER_MAP_OFFSET));
+        var level1  = game.ReadValue<IntPtr>((IntPtr)(mapBase + 0x8));
+        var level2  = game.ReadValue<IntPtr>((IntPtr)(level1  + 0x8));
+        var curNode = game.ReadValue<IntPtr>((IntPtr)(level2  + 0x8));
+
+        while (curNode != IntPtr.Zero)
+        {
+            var namePtr       = game.ReadValue<IntPtr>(curNode + 0x10);
+            string memberName = vars.ReadStringName(namePtr);
+            var index         = game.ReadValue<int>(curNode + 0x18);
+            var offset = index * memberSize + 0x8;
+            // print("memberName: " + memberName + " " + "offset: " + offset.ToString("X"));
+
+            if (!string.IsNullOrEmpty(memberName))
+                result[memberName] = offset;
+
+            curNode = game.ReadValue<IntPtr>(curNode);
+        }
+
+        return result;
+    });
+
     vars.FindChild = (Func<IntPtr, string, IntPtr>)((node, targetName) =>
     {
         var count    = game.ReadValue<int>   ((IntPtr)(node + vars.NODE_CHILDREN_OFFSET));
@@ -98,8 +125,10 @@ init
 
     vars.prevYhvhDead = 0;
 
-    print("CreateButton: " + createButton.ToString("X"));
+    print(main.ToString("X"));
 }
+
+
 
 start
 {
@@ -109,12 +138,14 @@ start
 
     if (shouldStart)
     {
+        print("Start");
         vars.yhvh = IntPtr.Zero;
         vars.prevYhvhDead = 0;
     }
 
     return shouldStart;
 }
+
 update
 {
     // 還沒抓到 Yhvh 就每幀嘗試
@@ -126,10 +157,15 @@ update
         var bossManager = vars.FindChild(main,        "BossManager");
         var yhvh        = vars.FindChild(bossManager, "Yhvh");
 
+        
+
         if (yhvh != IntPtr.Zero)
         {
             vars.yhvh = yhvh;
             print("Yhvh found: " + yhvh.ToString("X"));
+            yhvh = game.ReadValue<IntPtr>((IntPtr)(yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+            var yhvhOffsets = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(yhvh + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+            vars.yhvhOffsets = yhvhOffsets;
         }
     }
 }
@@ -140,9 +176,10 @@ split
 
     var yhvhInstance = game.ReadValue<IntPtr>((IntPtr)(vars.yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
     var yhvhMember   = game.ReadValue<IntPtr>((IntPtr)(yhvhInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
-    var yhvhDead     = game.ReadValue<byte>  ((IntPtr)(yhvhMember + 0xA80));
+    var yhvhDead     = game.ReadValue<byte>  ((IntPtr)(yhvhMember + vars.yhvhOffsets["dead"]));
 
     bool shouldSplit = yhvhDead == 1 && vars.prevYhvhDead == 0;
     vars.prevYhvhDead = yhvhDead;
     return shouldSplit;
 }
+
