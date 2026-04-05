@@ -7,7 +7,6 @@ startup
 
     // SceneTree
     vars.SCENETREE_ROOT_WINDOW_OFFSET        = 0x328; // Window*                           SceneTree::root
-    vars.SCENETREE_CURRENT_SCENE_OFFSET      = 0x830; // Node*                             SceneTree::current_scene
 
     // Node / Object
     vars.OBJECT_SCRIPT_INSTANCE_OFFSET       = 0x060; // ScriptInstance*                   Object::script_instance
