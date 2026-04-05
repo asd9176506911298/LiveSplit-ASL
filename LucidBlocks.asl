@@ -6,27 +6,20 @@ startup
     // Reference Micrologist's ASL Code https://raw.githubusercontent.com/Micrologist/LiveSplit.Bloodthief/refs/heads/main/BloodthiefDemo.asl
 
     // SceneTree
-    vars.SCENETREE_ROOT_WINDOW_OFFSET        = 0x328; // Window* f                          SceneTree::root
-    vars.SCENETREE_CURRENT_SCENE_OFFSET      = 0x830; // Node*   f                          SceneTree::current_scene
+    vars.SCENETREE_ROOT_WINDOW_OFFSET        = 0x328; // Window*                           SceneTree::root
+    vars.SCENETREE_CURRENT_SCENE_OFFSET      = 0x830; // Node*                             SceneTree::current_scene
 
     // Node / Object
-    vars.OBJECT_SCRIPT_INSTANCE_OFFSET       = 0x060; // ScriptInstance* f                  Object::script_instance
-    vars.NODE_CHILDREN_OFFSET                = 0x180; // HashMap<StringName, Node*> f       Node::Data::children
-    vars.NODE_NAME_OFFSET                    = 0x1D8; // StringName f                       Node::Data::name
+    vars.OBJECT_SCRIPT_INSTANCE_OFFSET       = 0x060; // ScriptInstance*                   Object::script_instance
+    vars.NODE_CHILDREN_OFFSET                = 0x180; // HashMap<StringName, Node*>        Node::Data::children
+    vars.NODE_NAME_OFFSET                    = 0x1D8; // StringName                        Node::Data::name
 
     // GDScriptInstance
-    vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET    = 0x018; // Ref<GDScript>   nochange                  GDScriptInstance::script
-    vars.SCRIPTINSTANCE_MEMBERS_OFFSET       = 0x028; // Vector<Variant> nochange                  GDScriptInstance::members
-    // 0x50 ?
+    vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET    = 0x018; // Ref<GDScript>   nochange          GDScriptInstance::script
+    vars.SCRIPTINSTANCE_MEMBERS_OFFSET       = 0x028; // Vector<Variant> nochange          GDScriptInstance::members
 
     // GDScript
-    vars.GDSCRIPT_MEMBER_MAP_OFFSET          = 0x1B8; // HashMap<StringName, MemberInfo> f  GDScript::member_indices
-
-    // CanvasLayer Didn't use so not check is correct
-    // vars.CANVASLAYER_VISIBLE_OFFSET          = 0x454; // bool                              CanvasLayer::visible
-
-    // CharacterBody3D Didn't use so not check is correct
-    // vars.CHARACTERBODY3D_VELOCITY_OFFSET     = 0x648; // Vector3                           CharacterBody3D::velocity
+    vars.GDSCRIPT_MEMBER_MAP_OFFSET          = 0x1B8; // HashMap<StringName, MemberInfo>   GDScript::member_indices
 }
 
 init
@@ -113,6 +106,9 @@ init
     var rootWindow     = game.ReadValue<IntPtr>((IntPtr)(sceneTree  + vars.SCENETREE_ROOT_WINDOW_OFFSET));
 
     var main            = vars.FindChild(rootWindow,     "Main");
+
+    vars.main = main;
+
     var ui              = vars.FindChild(main,           "UI");
     var worldEditMenu   = vars.FindChild(ui,             "WorldEditMenu");
     var marginContainer = vars.FindChild(worldEditMenu,  "MarginContainer");
@@ -125,7 +121,9 @@ init
 
     vars.prevYhvhDead = 0;
 
-    print(main.ToString("X"));
+    vars.yhvhMember = IntPtr.Zero;
+
+    print("Main: " + main.ToString("X"));
 }
 
 
@@ -140,6 +138,7 @@ start
     {
         print("Start");
         vars.yhvh = IntPtr.Zero;
+        vars.yhvhMember = IntPtr.Zero;
         vars.prevYhvhDead = 0;
     }
 
@@ -148,38 +147,34 @@ start
 
 update
 {
-    // 還沒抓到 Yhvh 就每幀嘗試
-    if (vars.yhvh == IntPtr.Zero)
-    {
-        var sceneTree  = game.ReadValue<IntPtr>((IntPtr)(vars.sceneTreePtr));
-        var rootWindow = game.ReadValue<IntPtr>((IntPtr)(sceneTree + vars.SCENETREE_ROOT_WINDOW_OFFSET));
-        var main        = vars.FindChild(rootWindow,  "Main");
-        var bossManager = vars.FindChild(main,        "BossManager");
-        var yhvh        = vars.FindChild(bossManager, "Yhvh");
+    if (vars.yhvh != IntPtr.Zero) return; // 已找到就直接跳過
 
-        
+    var bossManager = vars.FindChild(vars.main, "BossManager");
+    if (bossManager == IntPtr.Zero) return;
 
-        if (yhvh != IntPtr.Zero)
-        {
-            vars.yhvh = yhvh;
-            print("Yhvh found: " + yhvh.ToString("X"));
-            yhvh = game.ReadValue<IntPtr>((IntPtr)(yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
-            var yhvhOffsets = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(yhvh + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
-            vars.yhvhOffsets = yhvhOffsets;
-        }
-    }
+    var yhvh        = vars.FindChild(bossManager, "Yhvh");
+    if (yhvh == IntPtr.Zero) return;
+    
+    vars.yhvh = yhvh;
+    print("Yhvh found: " + yhvh.ToString("X"));
+
+    var yhvhInstance = game.ReadValue<IntPtr>((IntPtr)(yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    var yhvhOffsets = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(yhvhInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+    vars.yhvhOffsets = yhvhOffsets;
+    
+    vars.yhvhMember = game.ReadValue<IntPtr>((IntPtr)(yhvhInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
 }
 
 split
 {
-    if (vars.yhvh == IntPtr.Zero) return false;
+    if (vars.yhvhMember == IntPtr.Zero) return false;
 
-    var yhvhInstance = game.ReadValue<IntPtr>((IntPtr)(vars.yhvh + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
-    var yhvhMember   = game.ReadValue<IntPtr>((IntPtr)(yhvhInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
-    var yhvhDead     = game.ReadValue<byte>  ((IntPtr)(yhvhMember + vars.yhvhOffsets["dead"]));
-
+    var yhvhDead  = game.ReadValue<byte>((IntPtr)(vars.yhvhMember + vars.yhvhOffsets["dead"]));
     bool shouldSplit = yhvhDead == 1 && vars.prevYhvhDead == 0;
     vars.prevYhvhDead = yhvhDead;
+
+    if(shouldSplit)
+        print("Boss Dead Split");
+
     return shouldSplit;
 }
-
