@@ -39,3 +39,5 @@ https://store.steampowered.com/app/3290690/Styx_Blades_of_Greed
 https://store.steampowered.com/app/1588550/Cairn
 
 https://store.steampowered.com/app/3495730/Lucid_Blocks
+
+https://leafygames.itch.io/idols-of-ash
