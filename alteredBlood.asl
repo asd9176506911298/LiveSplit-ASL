@@ -17,6 +17,7 @@ start
 {
     if (vars.Resolver.CheckFlag("start"))
     {
+        print("Start");
         return true;
     }
 }
@@ -24,7 +25,8 @@ start
 split
 {
     if (vars.Resolver.CheckFlag("finish"))
-    {
+    {   
+        print("Finish Split");
         return true;
     }
 }
