@@ -41,3 +41,5 @@ https://store.steampowered.com/app/1588550/Cairn
 https://store.steampowered.com/app/3495730/Lucid_Blocks
 
 https://leafygames.itch.io/idols-of-ash
+
+https://www.speedrun.com/ALTEREDBLOOD
