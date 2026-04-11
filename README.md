@@ -43,3 +43,5 @@ https://store.steampowered.com/app/3495730/Lucid_Blocks
 https://leafygames.itch.io/idols-of-ash
 
 https://www.speedrun.com/ALTEREDBLOOD
+
+https://store.steampowered.com/app/4087530/Breaking_Armor/
