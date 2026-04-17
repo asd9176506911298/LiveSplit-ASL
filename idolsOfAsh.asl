@@ -61,6 +61,8 @@ init
             string memberName = vars.ReadStringName(namePtr);
             var index         = game.ReadValue<int>(curNode + 0x18);
 
+            // print("memberName: " + memberName + " " + "offset: " + (index * memberSize).ToString("X"));
+
             if (!string.IsNullOrEmpty(memberName))
                 result[memberName] = index * memberSize;
 
@@ -96,31 +98,34 @@ init
     // 讀取 climber 指針
     vars.GetClimber = (Func<IntPtr>)(() =>
     {
+        if (!vars.gameOffsets.ContainsKey("climber"))
+            return IntPtr.Zero;
+
         var gameInstance = game.ReadValue<IntPtr>((IntPtr)(vars.GameGame + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
         var members      = game.ReadValue<IntPtr>((IntPtr)(gameInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
         return game.ReadValue<IntPtr>((IntPtr)(members + vars.gameOffsets["climber"] + 0x10));
     });
 
-    // 讀取目前場景的某個 int 成員
-    vars.GetCurrentSceneIntMember = (Func<string, int>)((memberName) =>
-    {
-        var currentSceneNode     = game.ReadValue<IntPtr>((IntPtr)(vars.sceneTree + vars.SCENETREE_CURRENT_SCENE_OFFSET));
-        var currentSceneInstance = game.ReadValue<IntPtr>((IntPtr)(currentSceneNode + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
-        if (currentSceneInstance == IntPtr.Zero) return -1;
-
-        var script  = game.ReadValue<IntPtr>((IntPtr)(currentSceneInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET));
-        var offsets = vars.GetMemberOffsets(script);
-        if (!offsets.ContainsKey(memberName)) return -1;
-
-        var members = game.ReadValue<IntPtr>((IntPtr)(currentSceneInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
-        return game.ReadValue<int>((IntPtr)(members + offsets[memberName] + 0x8));
-    });
-
     // --- 初始化 ---
     var scn          = new SignatureScanner(game, game.MainModule.BaseAddress, game.MainModule.ModuleMemorySize);
-    var sceneTreeTrg = new SigScanTarget(3, "48 83 3D ?? ?? ?? ?? ?? C6 83")
+    var sceneTreeTrg = new SigScanTarget(3, "48 83 3D ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 0F 28 05") // 1.24
                        { OnFound = (p, s, ptr) => ptr + 0x5 + game.ReadValue<int>(ptr) };
     var sceneTreePtr = scn.Scan(sceneTreeTrg);
+    if (sceneTreePtr == IntPtr.Zero)
+    {
+        print("new sig not found, trying old sig...");
+        sceneTreeTrg = new SigScanTarget(3, "48 83 3D ?? ?? ?? ?? ?? C6 83") // 1.12
+                       { OnFound = (p, s, ptr) => ptr + 0x5 + game.ReadValue<int>(ptr) };
+        sceneTreePtr = scn.Scan(sceneTreeTrg);
+    }
+
+    if (sceneTreePtr == IntPtr.Zero)
+    {
+        print("ERROR: sceneTree sig not found!");
+        return;
+    }
+
+    print(sceneTreePtr.ToString("X"));  
 
     var sceneTree  = game.ReadValue<IntPtr>((IntPtr)(sceneTreePtr));
     var rootWindow = game.ReadValue<IntPtr>((IntPtr)(sceneTree + vars.SCENETREE_ROOT_WINDOW_OFFSET));
@@ -133,33 +138,73 @@ init
     vars.GameGame         = GameGame;
     vars.climber          = IntPtr.Zero;
     vars.lastClimber      = IntPtr.Zero;
-    vars.displayStage     = -1;
-    vars.lastDisplayStage = -1;
 
-    print("init done, scene: " + vars.GetCurrentScenePath());
+    vars.climberOffsets    = null;
+    vars.climberMember = IntPtr.Zero;
+    vars.lastInjuredState  = false;
+    vars.injuredRisingEdge = false;
+    vars.currentScene = "";
+    vars.lastScene    = "";
 }
 
 update
 {
-    vars.lastClimber      = vars.climber;
-    vars.climber          = vars.GetClimber();
+    vars.lastClimber = vars.climber;
+    vars.climber     = vars.GetClimber();
+    vars.lastScene    = vars.currentScene;
+    vars.currentScene = vars.GetCurrentScenePath();
 
-    vars.lastDisplayStage = vars.displayStage;
-    vars.displayStage     = vars.GetCurrentScenePath() == "res://scenes/transition_to_credits.tscn"
-                            ? vars.GetCurrentSceneIntMember("display_stage")
-                            : -1;
+    // 只在指針變動時重新抓 offsets 和 member base
+    if (vars.climber != vars.lastClimber)
+    {
+        if (vars.climber != IntPtr.Zero)
+        {
+            var climberInstance = game.ReadValue<IntPtr>((IntPtr)(vars.climber + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+
+            if (vars.climberOffsets == null)
+                vars.climberOffsets = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(climberInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+
+            vars.climberMember = game.ReadValue<IntPtr>((IntPtr)(climberInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
+        }
+
+        vars.lastInjuredState  = false;
+        vars.injuredRisingEdge = false;
+    }
+
+    // 每幀只做一次輕量讀取
+    if (vars.climber != IntPtr.Zero && vars.climberOffsets != null
+        && vars.climberOffsets.ContainsKey("injured_state"))
+    {
+        var climberInjuredState = game.ReadValue<bool>((IntPtr)(vars.climberMember + vars.climberOffsets["injured_state"] + 0x8));
+        vars.injuredRisingEdge  = !vars.lastInjuredState && climberInjuredState;
+        vars.lastInjuredState   = climberInjuredState;
+    }
+    else
+    {
+        vars.injuredRisingEdge = false;
+    }
 }
 
 start
 {
-    // climber 從空指針變成非空指針，或指針有變化
     bool pointerAppeared = vars.lastClimber == IntPtr.Zero && vars.climber != IntPtr.Zero;
     bool pointerChanged  = vars.climber != IntPtr.Zero     && vars.climber != vars.lastClimber;
+
+    // lastScene 為空代表是剛掛上 splitter 後第一次場景讀取，排除掉
+    if (string.IsNullOrEmpty(vars.lastScene))
+        return false;
+
     return pointerAppeared || pointerChanged;
 }
 
 split
 {
-    // display_stage 從非1 變成 1 的瞬間 split
-    return vars.lastDisplayStage != 1 && vars.displayStage == 1;
+    if (vars.injuredRisingEdge)
+        return true;
+
+    if (vars.currentScene == "res://scenes/credits.tscn"
+        && vars.lastScene  != "res://scenes/credits.tscn")
+        return true;
+
+    return false;
 }
