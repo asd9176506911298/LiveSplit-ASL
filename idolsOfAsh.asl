@@ -42,10 +42,7 @@ init
     vars.ReadStringName = (Func<IntPtr, string>)((ptr) =>
     {
         var stringPtr = game.ReadValue<IntPtr>(ptr + 0x8);
-        var output    = vars.ReadUtf32String(stringPtr);
-        if (String.IsNullOrEmpty(output))
-            output = game.ReadString(stringPtr, 255);
-        return output;
+        return vars.ReadUtf32String(stringPtr);
     });
 
     // 取得 GDScript 成員 offset 表
@@ -101,9 +98,15 @@ init
         if (!vars.gameOffsets.ContainsKey("climber"))
             return IntPtr.Zero;
 
-        var gameInstance = game.ReadValue<IntPtr>((IntPtr)(vars.GameGame + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
-        var members      = game.ReadValue<IntPtr>((IntPtr)(gameInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
-        return game.ReadValue<IntPtr>((IntPtr)(members + vars.gameOffsets["climber"] + 0x10));
+        return game.ReadValue<IntPtr>((IntPtr)(vars.gameMembers + vars.gameOffsets["climber"] + 0x10));
+    });
+
+    vars.GetTimeSinceWasTransition = (Func<double>)(() =>
+    {
+        if (!vars.SceneLoaderOffsets.ContainsKey("time_since_was_transitioning"))
+            return 0.0;
+
+        return game.ReadValue<double>((IntPtr)(vars.SceneLoaderMembers + vars.SceneLoaderOffsets["time_since_was_transitioning"] + 0x8));
     });
 
     // --- 初始化 ---
@@ -130,12 +133,19 @@ init
     var sceneTree  = game.ReadValue<IntPtr>((IntPtr)(sceneTreePtr));
     var rootWindow = game.ReadValue<IntPtr>((IntPtr)(sceneTree + vars.SCENETREE_ROOT_WINDOW_OFFSET));
     var GameGame   = vars.FindChild(rootWindow, "Game");
+    var SceneLoader = vars.FindChild(rootWindow, "SceneLoader");
 
-    var GameGameInstance = game.ReadValue<IntPtr>((IntPtr)(GameGame + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
-    vars.gameOffsets     = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(GameGameInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+    vars.GameGameInstance = game.ReadValue<IntPtr>((IntPtr)(GameGame + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    vars.gameOffsets     = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(vars.GameGameInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+    vars.gameMembers      = game.ReadValue<IntPtr>((IntPtr)(vars.GameGameInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
+
+    vars.SceneLoaderInstance = game.ReadValue<IntPtr>((IntPtr)(SceneLoader + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    vars.SceneLoaderOffsets  = vars.GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(vars.SceneLoaderInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
+    vars.SceneLoaderMembers   = game.ReadValue<IntPtr>((IntPtr)(vars.SceneLoaderInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
 
     vars.sceneTree        = sceneTree;
     vars.GameGame         = GameGame;
+    vars.SceneLoader      = SceneLoader;
     vars.climber          = IntPtr.Zero;
     vars.lastClimber      = IntPtr.Zero;
 
@@ -145,6 +155,9 @@ init
     vars.injuredRisingEdge = false;
     vars.currentScene = "";
     vars.lastScene    = "";
+    vars.timeSinceWasTransition = 0.0;
+    vars.lastTimeSinceWasTransition = 0.0;
+    vars.kilnSplitDone = false;
 }
 
 update
@@ -183,6 +196,17 @@ update
     {
         vars.injuredRisingEdge = false;
     }
+
+    if (vars.currentScene == "res://scenes/transition_from_first_kiln.tscn")
+    {
+        vars.lastTimeSinceWasTransition = vars.timeSinceWasTransition;
+        vars.timeSinceWasTransition = vars.GetTimeSinceWasTransition();
+    }
+    else if (vars.lastScene == "res://scenes/transition_from_first_kiln.tscn")
+    {
+        vars.timeSinceWasTransition = 0.0;
+        vars.lastTimeSinceWasTransition = 0.0;
+    }
 }
 
 start
@@ -190,11 +214,16 @@ start
     bool pointerAppeared = vars.lastClimber == IntPtr.Zero && vars.climber != IntPtr.Zero;
     bool pointerChanged  = vars.climber != IntPtr.Zero     && vars.climber != vars.lastClimber;
 
-    // lastScene 為空代表是剛掛上 splitter 後第一次場景讀取，排除掉
     if (string.IsNullOrEmpty(vars.lastScene))
         return false;
 
-    return pointerAppeared || pointerChanged;
+    if (pointerAppeared || pointerChanged)
+    {
+        vars.kilnSplitDone = false;
+        return true;
+    }
+
+    return false;
 }
 
 split
@@ -202,9 +231,23 @@ split
     if (vars.injuredRisingEdge)
         return true;
 
-    if (vars.currentScene == "res://scenes/credits.tscn"
-        && vars.lastScene  != "res://scenes/credits.tscn")
+    if (vars.currentScene == "res://scenes/transition_from_first_kiln.tscn"
+        && vars.lastTimeSinceWasTransition < 2.679
+        && vars.timeSinceWasTransition >= 2.679)
+    {
+        vars.kilnSplitDone = true;
+        return true;
+    }
+
+    if (!vars.kilnSplitDone
+        && vars.currentScene == "res://scenes/credits.tscn"
+        && vars.lastScene != "res://scenes/credits.tscn")
         return true;
 
     return false;
+}
+
+onReset
+{
+    vars.kilnSplitDone = false;
 }
