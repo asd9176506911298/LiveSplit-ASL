@@ -1,12 +1,13 @@
 state("Tales of Graces f Remastered")
 {   
-    //0x8e4450 EX_SHOP_MENU
-    byte startFlag: "GameNative.dll", 0x8e4458;
+    //0x8e4450 EX_SHOP_MENU 100
+    //0x8E3450 EX_SHOP_MENU 102 address diff 0x1000
+    byte startFlag: "GameNative.dll", 0x8E3458;
     // + 8 flag
-    byte startFlag2: "GameNative.dll", 0x8e445C;
+    byte startFlag2: "GameNative.dll", 0x8E345C;
     // + C flag
-    int loadingFlag: "GameNative.dll", 0x90284C;
-    int blackScreen: "GameNative.dll", 0x7D3B24;
+    int loadingFlag: "GameNative.dll", 0x90184C;
+    int blackScreen: "GameNative.dll", 0x7D2B24;
 }
 
 startup
