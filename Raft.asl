@@ -33,7 +33,7 @@ init
 
 start
 {
-    return current.PlayerStart != old.PlayerStart;
+    return !old.PlayerStart && current.PlayerStart;
 }
 
 update
