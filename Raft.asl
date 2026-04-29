@@ -112,29 +112,28 @@ onReset
 
 split
 {
-    if (current.RelayFinish >= vars.lastSplitRelayCount + 3)
+    float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
+    float elapsed = now - (float)vars.playerStartTime;
+
+    if (elapsed > 20.0f && current.RelayFinish >= vars.lastSplitRelayCount + 3)
     {
         vars.lastSplitRelayCount = current.RelayFinish;
         return true;
     }
 
-	if (current.PickNoteBook != old.PickNoteBook)
-	{
-		return true;
-	}
-
-	if (current.utopia != old.utopia)
-	{
-		return true;
-	}
-
-	float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-    float elapsed = now - (float)vars.playerStartTime;
-
-	if (elapsed <= 20.0f)
+    if (elapsed <= 20.0f)
     {
         vars.lastSplitRelayCount = current.RelayFinish;
-        return false;
+    }
+
+    if (current.PickNoteBook != old.PickNoteBook)
+    {
+        return true;
+    }
+
+    if (current.utopia != old.utopia)
+    {
+        return true;
     }
 }
 
