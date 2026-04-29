@@ -49,7 +49,7 @@ start
     // FULL GAME START
     if (settings["fullGame"])
     {
-        return current.PlayerStart != old.PlayerStart;
+        return !old.PlayerStart && current.PlayerStart;
     }
 
     // IL START
@@ -78,7 +78,7 @@ update
 	if(!old.PlayerStart && current.PlayerStart)
 	{
 		vars.playerStartTime = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-		vars.fadeOffset = current.FadeToAlpha; // 記錄基準值，而不是竄改 current
+		vars.fadeOffset = current.FadeToAlpha;
 	}
 
 	if(current.RelayFinish != old.RelayFinish)
