@@ -28,12 +28,14 @@ init
 	IntPtr pPickNoteBook = vars.JitSave.AddFlag("Pickup", "PickupNoteBookNote");
 	IntPtr pRelayFinish = vars.JitSave.AddFlag("NoteBook", "UnlockSpecificNoteNetworked");
 	IntPtr pFadeToAlpha = vars.JitSave.AddFlag("FadePanel", "FadeToAlpha");
+	IntPtr pInteractLate = vars.JitSave.AddFlag("QuestInteractable_Cutscene", "InteractLate");
 
 	vars.JitSave.ProcessQueue();
 
 	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook);
 	vars.Resolver.Watch<int>("RelayFinish",pRelayFinish); // use for balboa finish will trigger triple times
-	vars.Resolver.Watch<int>("FadeToAlpha",pFadeToAlpha);
+	vars.Resolver.Watch<int>("FadeToAlpha",pFadeToAlpha); // isLoading when start loading will call once stop loading call once
+	vars.Resolver.Watch<int>("utopia",pInteractLate);
 
 	vars.lastSplitRelayCount = 0;
 	vars.playerStartTime = 0.0;
@@ -121,6 +123,11 @@ split
     }
 
 	if (current.PickNoteBook != old.PickNoteBook)
+	{
+		return true;
+	}
+
+	if (current.utopia != old.utopia)
 	{
 		return true;
 	}
