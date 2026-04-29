@@ -6,6 +6,14 @@ startup
 {
 	Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
     vars.Uhara.AlertLoadless();
+
+	settings.Add("runType", true, "Run Type");
+
+    settings.Add("fullGame", true, "Full Game (Start on load)", "runType");
+    settings.SetToolTip("fullGame", "Starts when player loads into world");
+
+    settings.Add("il", false, "Individual Level (Start on movement)", "runType");
+    settings.SetToolTip("il", "Starts on first detected movement (no filtering)");
 }
 
 init
@@ -35,7 +43,23 @@ init
 
 start
 {
-    return !old.PlayerStart && current.PlayerStart;
+     // Prevent invalid dual-selection
+    if (settings["fullGame"] == settings["il"])
+        return false;
+
+    // FULL GAME START
+    if (settings["fullGame"])
+    {
+        return current.PlayerStart != old.PlayerStart;
+    }
+
+    // IL START
+    if (settings["il"])
+    {
+        return !old.PlayerMoving && current.PlayerMoving;
+    }
+
+    return false;
 }
 
 update
