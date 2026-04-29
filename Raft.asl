@@ -19,16 +19,18 @@ init
 	vars.Instance.Watch<bool>("IsGameSceneLoaded", "LoadSceneManager", "IsGameSceneLoaded");
 	vars.Instance.Watch<bool>("PlayerStart", "PersonController", "completelyStarted");
 	vars.Instance.Watch<bool>("PlayerMoving", "PersonController", "moving");
+	vars.Instance.Watch<float>("TimePlayed", "GameManager", "TimePlayed");
 
 	IntPtr pPickNoteBook = vars.JitSave.AddFlag("Pickup", "PickupNoteBookNote");
 	IntPtr pRelayFinish = vars.JitSave.AddFlag("NoteBook", "UnlockSpecificNoteNetworked");
 
 	vars.JitSave.ProcessQueue();
 
-	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook); // use for balboa finish will trigger triple times
+	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook);
 	vars.Resolver.Watch<int>("RelayFinish",pRelayFinish); // use for balboa finish will trigger triple times
 
 	vars.lastSplitRelayCount = 0;
+	vars.playerStartTime = 0.0;
 }
 
 start
@@ -45,6 +47,7 @@ update
 	if(current.PlayerStart != old.PlayerStart)
 	{
 		print("PlayerStart: " + old.PlayerStart + " - > " + current.PlayerStart);
+		vars.playerStartTime = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
 	}
 
 	if(current.IsLoadingScene != old.IsLoadingScene)
@@ -72,14 +75,34 @@ update
 		print("PickNoteBook: " + old.PickNoteBook + " - > " + current.PickNoteBook);
 	}
 
-	if(current.PlayerMoving != old.PlayerMoving)
-	{
-		print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
-	}
+	// if(current.PlayerMoving != old.PlayerMoving)
+	// {
+	// 	print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
+	// }
+
+
+	// if(current.TimePlayed != old.TimePlayed)
+	// {
+	// 	print("TimePlayed: " + old.TimePlayed + " - > " + current.TimePlayed);
+	// }
+}
+
+onReset
+{
+	vars.lastSplitRelayCount = 0;
 }
 
 split
 {
+    float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
+    float elapsed = now - vars.playerStartTime;
+
+    if (elapsed <= 10.0f)
+    {
+        vars.lastSplitRelayCount = current.RelayFinish;
+        return false;
+    }
+
     if (current.RelayFinish >= vars.lastSplitRelayCount + 3)
     {
         vars.lastSplitRelayCount = current.RelayFinish;
