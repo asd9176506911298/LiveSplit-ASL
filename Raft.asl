@@ -93,6 +93,11 @@ update
 		print("PickNoteBook: " + old.PickNoteBook + " - > " + current.PickNoteBook);
 	}
 
+	if(current.utopia != old.utopia)
+	{
+		print("utopia: " + old.utopia + " - > " + current.utopia);
+	}
+
 	// if(current.PlayerMoving != old.PlayerMoving)
 	// {
 	// 	print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
@@ -107,15 +112,6 @@ onReset
 
 split
 {
-    float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-    float elapsed = now - (float)vars.playerStartTime;
-
-    if (elapsed <= 20.0f)
-    {
-        vars.lastSplitRelayCount = current.RelayFinish;
-        return false;
-    }
-
     if (current.RelayFinish >= vars.lastSplitRelayCount + 3)
     {
         vars.lastSplitRelayCount = current.RelayFinish;
@@ -131,6 +127,15 @@ split
 	{
 		return true;
 	}
+
+	float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
+    float elapsed = now - (float)vars.playerStartTime;
+
+	if (elapsed <= 20.0f)
+    {
+        vars.lastSplitRelayCount = current.RelayFinish;
+        return false;
+    }
 }
 
 isLoading
