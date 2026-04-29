@@ -1,4 +1,4 @@
-state ("raft")
+state ("Raft")
 {
 }
 
@@ -17,14 +17,18 @@ init
 
 	vars.Instance.Watch<bool>("IsLoadingScene", "LoadSceneManager", "IsLoadingScene");
 	vars.Instance.Watch<bool>("IsGameSceneLoaded", "LoadSceneManager", "IsGameSceneLoaded");
+	vars.Instance.Watch<bool>("PlayerStart", "PersonController", "completelyStarted");
+	vars.Instance.Watch<bool>("PlayerMoving", "PersonController", "moving");
 
-	IntPtr pPlayerStart = vars.JitSave.AddFlag("PersonController", "Start");
+	IntPtr pPickNoteBook = vars.JitSave.AddFlag("Pickup", "PickupNoteBookNote");
+	IntPtr pRelayFinish = vars.JitSave.AddFlag("NoteBook", "UnlockSpecificNoteNetworked");
 
 	vars.JitSave.ProcessQueue();
 
-	vars.Resolver.Watch<int>("PlayerStart",pPlayerStart);
+	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook); // use for balboa finish will trigger triple times
+	vars.Resolver.Watch<int>("RelayFinish",pRelayFinish); // use for balboa finish will trigger triple times
 
-	vars.enteredGame = false;
+	vars.lastSplitRelayCount = 0;
 }
 
 start
@@ -37,6 +41,11 @@ update
     vars.Uhara.Update();
 	current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
     current.LoadingScene = vars.Utils.GetLoadingSceneName() ?? current.LoadingScene;
+
+	if(current.PlayerStart != old.PlayerStart)
+	{
+		print("PlayerStart: " + old.PlayerStart + " - > " + current.PlayerStart);
+	}
 
 	if(current.IsLoadingScene != old.IsLoadingScene)
 	{
@@ -52,15 +61,44 @@ update
 	{
 		print("ActiveScene: " + old.ActiveScene + " - > " + current.ActiveScene);
 	}
+
+	if(current.RelayFinish != old.RelayFinish)
+	{
+		print("RelayFinish: " + old.RelayFinish + " - > " + current.RelayFinish);
+	}
+
+	if(current.PickNoteBook != old.PickNoteBook)
+	{
+		print("PickNoteBook: " + old.PickNoteBook + " - > " + current.PickNoteBook);
+	}
+
+	if(current.PlayerMoving != old.PlayerMoving)
+	{
+		print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
+	}
 }
 
-isLoading
+split
 {
-    if (current.ActiveScene == "MainMenuScene")
-        return false;
-
-    if (current.LoadingScene == "MainMenuScene")
+    if (current.RelayFinish >= vars.lastSplitRelayCount + 3)
+    {
+        vars.lastSplitRelayCount = current.RelayFinish;
         return true;
-    
-    return current.IsLoadingScene || !current.IsGameSceneLoaded;
+    }
+
+	if (current.PickNoteBook != old.PickNoteBook)
+	{
+		return true;
+	}
 }
+
+// isLoading
+// {
+//     if (current.ActiveScene == "MainMenuScene")
+//         return false;
+
+//     if (current.LoadingScene == "MainMenuScene")
+//         return true;
+    
+//     return current.IsLoadingScene || !current.IsGameSceneLoaded;
+// }
