@@ -22,23 +22,22 @@ init
 	vars.Instance = vars.Uhara.CreateTool("Unity", "DotNet", "Instance");
     vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
 
-
-	vars.Instance.Watch<bool>("IsLoadingScene", "LoadSceneManager", "IsLoadingScene");
-	vars.Instance.Watch<bool>("IsGameSceneLoaded", "LoadSceneManager", "IsGameSceneLoaded");
 	vars.Instance.Watch<bool>("PlayerStart", "PersonController", "completelyStarted");
 	vars.Instance.Watch<bool>("PlayerMoving", "PersonController", "moving");
-	vars.Instance.Watch<float>("TimePlayed", "GameManager", "TimePlayed");
 
 	IntPtr pPickNoteBook = vars.JitSave.AddFlag("Pickup", "PickupNoteBookNote");
 	IntPtr pRelayFinish = vars.JitSave.AddFlag("NoteBook", "UnlockSpecificNoteNetworked");
+	IntPtr pFadeToAlpha = vars.JitSave.AddFlag("FadePanel", "FadeToAlpha");
 
 	vars.JitSave.ProcessQueue();
 
 	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook);
 	vars.Resolver.Watch<int>("RelayFinish",pRelayFinish); // use for balboa finish will trigger triple times
+	vars.Resolver.Watch<int>("FadeToAlpha",pFadeToAlpha);
 
 	vars.lastSplitRelayCount = 0;
 	vars.playerStartTime = 0.0;
+	vars.fadeOffset = 0;
 }
 
 start
@@ -65,28 +64,21 @@ start
 update
 {
     vars.Uhara.Update();
-	current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
-    current.LoadingScene = vars.Utils.GetLoadingSceneName() ?? current.LoadingScene;
+
+	if(current.FadeToAlpha != old.FadeToAlpha)
+	{
+		print("FadeToAlpha: " + old.FadeToAlpha + " - > " + current.FadeToAlpha);
+	}
 
 	if(current.PlayerStart != old.PlayerStart)
 	{
 		print("PlayerStart: " + old.PlayerStart + " - > " + current.PlayerStart);
+	}
+
+	if(!old.PlayerStart && current.PlayerStart)
+	{
 		vars.playerStartTime = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-	}
-
-	if(current.IsLoadingScene != old.IsLoadingScene)
-	{
-		print("IsLoadingScene: " + old.IsLoadingScene + " - > " + current.IsLoadingScene);
-	}
-
-	if(current.IsGameSceneLoaded != old.IsGameSceneLoaded)
-	{
-		print("IsGameSceneLoaded: " + old.IsGameSceneLoaded + " - > " + current.IsGameSceneLoaded);
-	}
-
-	if(current.ActiveScene != old.ActiveScene)
-	{
-		print("ActiveScene: " + old.ActiveScene + " - > " + current.ActiveScene);
+		vars.fadeOffset = current.FadeToAlpha; // 記錄基準值，而不是竄改 current
 	}
 
 	if(current.RelayFinish != old.RelayFinish)
@@ -103,25 +95,20 @@ update
 	// {
 	// 	print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
 	// }
-
-
-	// if(current.TimePlayed != old.TimePlayed)
-	// {
-	// 	print("TimePlayed: " + old.TimePlayed + " - > " + current.TimePlayed);
-	// }
 }
 
 onReset
 {
-	vars.lastSplitRelayCount = 0;
+    vars.lastSplitRelayCount = 0;
+    vars.fadeOffset = 0;
 }
 
 split
 {
     float now = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-    float elapsed = now - vars.playerStartTime;
+    float elapsed = now - (float)vars.playerStartTime;
 
-    if (elapsed <= 10.0f)
+    if (elapsed <= 20.0f)
     {
         vars.lastSplitRelayCount = current.RelayFinish;
         return false;
@@ -139,13 +126,7 @@ split
 	}
 }
 
-// isLoading
-// {
-//     if (current.ActiveScene == "MainMenuScene")
-//         return false;
-
-//     if (current.LoadingScene == "MainMenuScene")
-//         return true;
-    
-//     return current.IsLoadingScene || !current.IsGameSceneLoaded;
-// }
+isLoading
+{
+    return (current.FadeToAlpha - vars.fadeOffset) % 2 != 0;
+}
