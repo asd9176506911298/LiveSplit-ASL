@@ -24,17 +24,18 @@ init
 
 	vars.Instance.Watch<bool>("PlayerStart", "PersonController", "completelyStarted");
 	vars.Instance.Watch<bool>("PlayerMoving", "PersonController", "moving");
+	vars.Instance.Watch<bool>("IsLoadingScene", "LoadSceneManager", "IsLoadingScene");
+	vars.Instance.Watch<bool>("IsAllLandmarksLoaded", "Raft_Network", "IsAllLandmarksLoaded");
+	vars.Instance.Watch<bool>("IsLoadingLobbyScene", "LoadSceneManager", "IsLoadingLobbyScene");
 
 	IntPtr pPickNoteBook = vars.JitSave.AddFlag("Pickup", "PickupNoteBookNote");
 	IntPtr pRelayFinish = vars.JitSave.AddFlag("NoteBook", "UnlockSpecificNoteNetworked");
-	IntPtr pFadeToAlpha = vars.JitSave.AddFlag("FadePanel", "FadeToAlpha");
 	IntPtr pInteractLate = vars.JitSave.AddFlag("QuestInteractable_Cutscene", "InteractLate");
 
 	vars.JitSave.ProcessQueue();
 
 	vars.Resolver.Watch<int>("PickNoteBook",pPickNoteBook);
 	vars.Resolver.Watch<int>("RelayFinish",pRelayFinish); // use for balboa finish will trigger triple times
-	vars.Resolver.Watch<int>("FadeToAlpha",pFadeToAlpha); // isLoading when start loading will call once stop loading call once
 	vars.Resolver.Watch<int>("utopia",pInteractLate);
 
 	vars.lastSplitRelayCount = 0;
@@ -66,11 +67,8 @@ start
 update
 {
     vars.Uhara.Update();
-
-	if(current.FadeToAlpha != old.FadeToAlpha)
-	{
-		print("FadeToAlpha: " + old.FadeToAlpha + " - > " + current.FadeToAlpha);
-	}
+	current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
+    current.LoadingScene = vars.Utils.GetLoadingSceneName() ?? current.LoadingScene;
 
 	if(current.PlayerStart != old.PlayerStart)
 	{
@@ -102,6 +100,13 @@ update
 	// {
 	// 	print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
 	// }
+
+	if(current.IsLoadingScene != old.IsLoadingScene)
+    	print("IsLoadingScene: " + old.IsLoadingScene + " - > " + current.IsLoadingScene);
+	if(current.IsAllLandmarksLoaded != old.IsAllLandmarksLoaded)
+    	print("IsAllLandmarksLoaded: " + old.IsAllLandmarksLoaded + " - > " + current.IsAllLandmarksLoaded);
+	if(current.IsLoadingLobbyScene != old.IsLoadingLobbyScene)
+    	print("IsLoadingLobbyScene: " + old.IsLoadingLobbyScene + " - > " + current.IsLoadingLobbyScene);
 }
 
 onReset
@@ -139,5 +144,9 @@ split
 
 isLoading
 {
-    return (current.FadeToAlpha - vars.fadeOffset) % 2 != 0;
+    if (current.IsLoadingScene || current.IsLoadingLobbyScene) return true;
+
+    if (current.ActiveScene != "MainMenuScene" && !current.IsAllLandmarksLoaded) return true;
+
+    return false;
 }
