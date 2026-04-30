@@ -24,7 +24,6 @@ init
 
 	vars.Instance.Watch<bool>("PlayerStart", "PersonController", "completelyStarted");
 	vars.Instance.Watch<bool>("PlayerMoving", "PersonController", "moving");
-	vars.Instance.Watch<bool>("IsLoadingScene", "LoadSceneManager", "IsLoadingScene");
 	vars.Instance.Watch<bool>("IsAllLandmarksLoaded", "Raft_Network", "IsAllLandmarksLoaded");
 	vars.Instance.Watch<bool>("IsLoadingLobbyScene", "LoadSceneManager", "IsLoadingLobbyScene");
 
@@ -99,8 +98,6 @@ update
 	// 	print("PlayerMoving: " + old.PlayerMoving + " - > " + current.PlayerMoving);
 	// }
 
-	if(current.IsLoadingScene != old.IsLoadingScene)
-    	print("IsLoadingScene: " + old.IsLoadingScene + " - > " + current.IsLoadingScene);
 	if(current.IsAllLandmarksLoaded != old.IsAllLandmarksLoaded)
     	print("IsAllLandmarksLoaded: " + old.IsAllLandmarksLoaded + " - > " + current.IsAllLandmarksLoaded);
 	if(current.IsLoadingLobbyScene != old.IsLoadingLobbyScene)
@@ -141,7 +138,7 @@ split
 
 isLoading
 {
-    if (current.IsLoadingScene || current.IsLoadingLobbyScene) return true;
+    if (current.IsLoadingLobbyScene) return true;
 
     if (current.ActiveScene != "MainMenuScene" && !current.IsAllLandmarksLoaded) return true;
 
