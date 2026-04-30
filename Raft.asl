@@ -40,7 +40,6 @@ init
 
 	vars.lastSplitRelayCount = 0;
 	vars.playerStartTime = 0.0;
-	vars.fadeOffset = 0;
 }
 
 start
@@ -78,7 +77,6 @@ update
 	if(!old.PlayerStart && current.PlayerStart)
 	{
 		vars.playerStartTime = (float)timer.CurrentTime.RealTime.Value.TotalSeconds;
-		vars.fadeOffset = current.FadeToAlpha;
 	}
 
 	if(current.RelayFinish != old.RelayFinish)
@@ -112,7 +110,6 @@ update
 onReset
 {
     vars.lastSplitRelayCount = 0;
-    vars.fadeOffset = 0;
 }
 
 split
