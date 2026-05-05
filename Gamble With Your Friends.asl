@@ -14,6 +14,8 @@ init
     vars.Instance = vars.Uhara.CreateTool("Unity", "DotNet", "Instance");
     vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
 
+    vars.Instance.Watch<bool>("isTransitioning", "GameManager", "_isTransitioning");
+
     IntPtr pStart = vars.JitSave.AddFlag("SpawnBoxPlayerRagdollTrigger", "EnableLidColliders");
     IntPtr pLimo = vars.JitSave.AddFlag("DaySummaryUI", "Show");
     IntPtr pEndingPay = vars.JitSave.AddFlag("WinSceneManager", "ServerInitializePayDebt");
@@ -55,4 +57,23 @@ update
     {
         print("old.LoadingScene: " + old.LoadingScene + " - > current.LoadingScene: " + current.LoadingScene);
     }
+
+    if(current.isTransitioning != old.isTransitioning)
+    {
+        print("old.isTransitioning: " + old.isTransitioning + " - > current.isTransitioning: " + current.isTransitioning);
+    }
+}
+
+reset
+{
+    if(old.ActiveScene != "MainMenuScene" && current.ActiveScene == "MainMenuScene")
+    {
+        print("Reset");
+        return true;
+    }
+}
+
+isLoading
+{
+    return current.isTransitioning;
 }
