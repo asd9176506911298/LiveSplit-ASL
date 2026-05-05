@@ -6,6 +6,10 @@ startup
 {
 	Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
     vars.Uhara.AlertLoadless();
+
+    settings.Add("AutoReset", true, "AutoReset");
+    settings.SetToolTip("AutoReset", "Reset When Scene Change to MainMenu");
+
 }
 
 init
@@ -48,28 +52,31 @@ update
     current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
     current.LoadingScene = vars.Utils.GetLoadingSceneName() ?? current.LoadingScene;
 
-    if(current.ActiveScene != old.ActiveScene)
-    {
-        print("old.ActiveScene: " + old.ActiveScene + " - > current.ActiveScene: " + current.ActiveScene);
-    }
+    // if(current.ActiveScene != old.ActiveScene)
+    // {
+    //     print("old.ActiveScene: " + old.ActiveScene + " - > current.ActiveScene: " + current.ActiveScene);
+    // }
     
-    if(current.LoadingScene != old.LoadingScene)
-    {
-        print("old.LoadingScene: " + old.LoadingScene + " - > current.LoadingScene: " + current.LoadingScene);
-    }
+    // if(current.LoadingScene != old.LoadingScene)
+    // {
+    //     print("old.LoadingScene: " + old.LoadingScene + " - > current.LoadingScene: " + current.LoadingScene);
+    // }
 
-    if(current.isTransitioning != old.isTransitioning)
-    {
-        print("old.isTransitioning: " + old.isTransitioning + " - > current.isTransitioning: " + current.isTransitioning);
-    }
+    // if(current.isTransitioning != old.isTransitioning)
+    // {
+    //     print("old.isTransitioning: " + old.isTransitioning + " - > current.isTransitioning: " + current.isTransitioning);
+    // }
 }
 
 reset
 {
-    if(old.ActiveScene != "MainMenuScene" && current.ActiveScene == "MainMenuScene")
+    if(settings["AutoReset"])
     {
-        print("Reset");
-        return true;
+        if(old.ActiveScene != "MainMenuScene" && current.ActiveScene == "MainMenuScene")
+        {
+            // print("Reset");
+            return true;
+        }
     }
 }
 
