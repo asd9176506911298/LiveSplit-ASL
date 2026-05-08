@@ -291,6 +291,8 @@ reset
 
 isLoading
 {
+    if (current.activeScreen == null) return false;
+    
     return current.activeScreen == vars.GUIScreen_Loading
         || current.activeScreen == vars.GUIScreen_PostGame
         || current.activeScreen == vars.GUIScreen_Cutscene;
