@@ -3,6 +3,7 @@ state("ActionHenk") {}
 startup
 {
     Assembly.Load(File.ReadAllBytes("Components/asl-help")).CreateInstance("Unity");
+    vars.Helper.AlertLoadless();
 
     vars.GUIScreen_MainMenu    =  1;
     vars.GUIScreen_Loading     =  5;
