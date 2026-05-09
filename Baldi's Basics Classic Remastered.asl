@@ -17,13 +17,13 @@ update
 {
     vars.Uhara.Update();
 
-    float cleanVelocity = float.IsNaN(current.realVelocity) ? 0f : current.realVelocity;
-    float cleanOldVelocity = float.IsNaN(old.realVelocity) ? 0f : old.realVelocity;
+    // float cleanVelocity = float.IsNaN(current.realVelocity) ? 0f : current.realVelocity;
+    // float cleanOldVelocity = float.IsNaN(old.realVelocity) ? 0f : old.realVelocity;
 
-    if (cleanVelocity != cleanOldVelocity)
-    {
-        print("Cleaned Velocity: " + cleanOldVelocity + " -> " + cleanVelocity);
-    }
+    // if (cleanVelocity != cleanOldVelocity)
+    // {
+    //     print("Cleaned Velocity: " + cleanOldVelocity + " -> " + cleanVelocity);
+    // }
 }
 
 start
