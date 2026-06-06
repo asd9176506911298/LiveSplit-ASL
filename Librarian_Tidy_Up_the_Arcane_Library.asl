@@ -9,13 +9,13 @@ init
 {
     vars.Events = vars.Uhara.CreateTool("UnrealEngine", "Events");
 
-    vars.Events.FunctionFlag("start", "WBP_Title_C", "TitleUMG", "StartGame");
+    vars.Events.FunctionFlag("startFlag", "WBP_Title_C", "TitleUMG", "StartGame");
     vars.Events.FunctionFlag("resetFlag", "WBP_PauseMenu_C", "WBP_PauseMenu_C", "OnBackToTitleMenu");
 }
 
 start
 {
-    if (vars.Resolver.CheckFlag("start"))
+    if (vars.Resolver.CheckFlag("startFlag"))
     {
         return true;
     }
