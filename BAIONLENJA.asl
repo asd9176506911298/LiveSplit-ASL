@@ -10,13 +10,15 @@ init
     vars.Utils = vars.Uhara.CreateTool("UnrealEngine", "Utils");
     vars.Events = vars.Uhara.CreateTool("UnrealEngine", "Events");
 
+    vars.Events.FunctionFlag("startFlag", "CutsceneManagerActor_C", "CutsceneActor_C*", "EndCut");
+
     vars.Resolver.Watch<uint>("GWorldName", vars.Utils.GWorld, 0x18);
     current.World = "";
 }
 
 start
 {
-    if(old.World == "MainMenuMap" && current.World == "INTRO_TUTORIAL")
+    if (vars.Resolver.CheckFlag("startFlag"))
     {
         vars.Uhara.Log("Start");
         return true;
