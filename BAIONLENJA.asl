@@ -16,7 +16,7 @@ init
 
 start
 {
-    if(old.World == "MainMenuMap" && current.World != "MainMenuMap")
+    if(old.World == "MainMenuMap" && current.World == "INTRO_TUTORIAL")
     {
         vars.Uhara.Log("Start");
         return true;
