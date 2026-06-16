@@ -10,15 +10,16 @@ init
     vars.Utils = vars.Uhara.CreateTool("UnrealEngine", "Utils");
     vars.Events = vars.Uhara.CreateTool("UnrealEngine", "Events");
 
-    vars.Events.FunctionFlag("startFlag", "CutsceneManagerActor_C", "CutsceneActor_C*", "EndCut");
+    IntPtr playerPtr = vars.Events.FunctionParentPtr("BP_FirstPersonCharacter_C", "BP_FirstPersonCharacter_C*", "");
 
+    vars.Resolver.Watch<double>("currentSpeed", playerPtr, 0x1758);
     vars.Resolver.Watch<uint>("GWorldName", vars.Utils.GWorld, 0x18);
     current.World = "";
 }
 
 start
 {
-    if (vars.Resolver.CheckFlag("startFlag"))
+    if (current.currentSpeed > 0 && old.currentSpeed <= 0)
     {
         vars.Uhara.Log("Start");
         return true;
@@ -37,6 +38,11 @@ reset
 update
 {
     vars.Uhara.Update();
+
+    // if(current.currentSpeed != old.currentSpeed)
+    // {
+    //     vars.Uhara.Log("Speed: " + current.currentSpeed);
+    // }
 
     var world = vars.Utils.FNameToString(current.GWorldName);
     if (!string.IsNullOrEmpty(world) && world != "None") current.World = world;
