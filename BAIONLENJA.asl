@@ -59,3 +59,12 @@ update
     if (!string.IsNullOrEmpty(world) && world != "None") current.World = world;
     if (old.World != current.World) vars.Uhara.Log("World: " + current.World);
 }
+
+split
+{
+    if (old.World != current.World && old.World != "MainMenuMap")
+    {
+        vars.Uhara.Log("Split");
+        return true;
+    }
+}
