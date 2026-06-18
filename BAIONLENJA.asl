@@ -12,20 +12,31 @@ init
 
     IntPtr playerPtr = vars.Events.FunctionParentPtr("BP_FirstPersonCharacter_C", "BP_FirstPersonCharacter_C*", "");
 
-    vars.Resolver.Watch<double>("currentSpeed", playerPtr, 0x1758);
+    /*
+        ABP_FirstPersonCharacter_C : ACharacter -> UCharacterMovementComponent -> Velocity
+                                      playerPtr -> 0x330 -> 0xB0
+    */
+    vars.Resolver.Watch<double>("velocityX", playerPtr, 0x330, 0xB8);
+    vars.Resolver.Watch<double>("velocityY", playerPtr, 0x330, 0xC0);
     vars.Resolver.Watch<uint>("GWorldName", vars.Utils.GWorld, 0x18);
     current.World = "";
 }
 
 start
 {
-    if (current.currentSpeed > 0 && old.currentSpeed <= 0)
+    double vx = current.velocityX;
+    double vy = current.velocityY;
+    double oldVx = old.velocityX;
+    double oldVy = old.velocityY;
+    double speed = Math.Sqrt(vx * vx + vy * vy);
+    double oldSpeed = Math.Sqrt(oldVx * oldVx + oldVy * oldVy);
+
+    if (speed > 0 && oldSpeed <= 0)
     {
-        vars.Uhara.Log("Start");
+        // vars.Uhara.Log("Start, speed: " + speed);
         return true;
     }
 }
-
 reset
 {
     if(old.World != "MainMenuMap" && current.World == "MainMenuMap")
