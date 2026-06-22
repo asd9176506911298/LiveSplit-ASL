@@ -23,6 +23,11 @@ update
 {
     vars.Uhara.Update();
     current.activeScene = vars.Utils.GetActiveSceneName() ?? current.activeScene;
+
+    if(current.activeScene != old.activeScene)
+    {
+        vars.Uhara.Log("old.activeScene: " + old.activeScene + " - > current.activeScene: " + current.activeScene);
+    }
 }
 
 start
@@ -30,6 +35,15 @@ start
      if (current.gameStart != old.gameStart)
     {
         vars.Uhara.Log("Game Start");
+        return true;
+    }
+}
+
+reset
+{
+    if(old.activeScene != "MainMenu" && current.activeScene == "MainMenu")
+    {
+        vars.Uhara.Log("Reset");
         return true;
     }
 }
