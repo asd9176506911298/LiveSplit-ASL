@@ -10,6 +10,8 @@ init
     vars.Utils = vars.Uhara.CreateTool("UnrealEngine", "Utils");
     vars.Events = vars.Uhara.CreateTool("UnrealEngine", "Events");
 
+    vars.Events.FunctionFlag("finish", "LevelChangeDoor_C", "LevelchangeTrigger*", "ReceiveBeginPlay");
+
     IntPtr playerPtr = vars.Events.FunctionParentPtr("BP_FirstPersonCharacter_C", "BP_FirstPersonCharacter_C*", "");
 
     /*
@@ -55,6 +57,11 @@ update
     //     vars.Uhara.Log("Speed: " + current.currentSpeed);
     // }
 
+    // if(current.finish != old.finish)
+    // {
+    //     vars.Uhara.Log(old.finish + " -> " + current.finish);
+    // }
+
     var world = vars.Utils.FNameToString(current.GWorldName);
     if (!string.IsNullOrEmpty(world) && world != "None") current.World = world;
     if (old.World != current.World) vars.Uhara.Log("World: " + current.World);
@@ -62,9 +69,18 @@ update
 
 split
 {
-    if (old.World != current.World && old.World != "MainMenuMap")
+    if (old.World != current.World 
+        && old.World != "MainMenuMap"
+        && old.World != "HUB1"
+        && current.World != "HUB1")
     {
         vars.Uhara.Log("Split");
+        return true;
+    }
+
+    if(current.finish != old.finish)
+    {
+        vars.Uhara.Log("Split Finish Level");
         return true;
     }
 }
