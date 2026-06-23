@@ -48,4 +48,6 @@ https://store.steampowered.com/app/4087530/Breaking_Armor
 
 https://store.steampowered.com/app/2530980/Tales_of_Graces_f_Remastered
 
-https://store.steampowered.com/app/4197610/Librarian_Tidy_Up_the_Arcane_Library/
+https://store.steampowered.com/app/4197610/Librarian_Tidy_Up_the_Arcane_Library
+
+https://store.steampowered.com/app/3844970/Burglin_Gnomes
