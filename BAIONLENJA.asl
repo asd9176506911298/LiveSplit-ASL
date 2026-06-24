@@ -3,6 +3,7 @@ state("BAIONLENJA-Win64-Shipping") {}
 startup
 {
     Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
+    vars.Uhara.AlertLoadless();
 }
 
 init
@@ -22,6 +23,7 @@ init
     vars.Resolver.Watch<double>("velocityX", playerPtr, 0x330, 0xB8);
     vars.Resolver.Watch<double>("velocityY", playerPtr, 0x330, 0xC0);
     vars.Resolver.Watch<bool>("levelComplete", levelCompletePtr, 0x339);
+    vars.Resolver.Watch<bool>("Loading", vars.Utils.GSync);
     vars.Resolver.Watch<uint>("GWorldName", vars.Utils.GWorld, 0x18);
     current.World = "";
 
@@ -72,6 +74,11 @@ update
     //     vars.Uhara.Log("LevelComplete: " + old.levelComplete + " -> " + current.levelComplete);
     // }
 
+    // if(current.Loading != old.Loading)
+    // {
+    //     vars.Uhara.Log("Loading: " + old.Loading + " -> " + current.Loading);
+    // }
+
     var world = vars.Utils.FNameToString(current.GWorldName);
     if (!string.IsNullOrEmpty(world) && world != "None") current.World = world;
     if (old.World != current.World) vars.Uhara.Log("World: " + current.World);
@@ -97,6 +104,11 @@ split
         vars.Uhara.Log("Split Finish Level");
         return true;
     }
+}
+
+isLoading
+{
+    return current.Loading;
 }
 
 onReset
