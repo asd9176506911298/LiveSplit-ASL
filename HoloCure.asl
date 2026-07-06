@@ -12,9 +12,20 @@ startup {
     vars.Object_PropOff      = 0x18;
     vars.Object_NameOff      = 0x00;
     vars.Object_InstListBase = 0x68;
+    vars.Object_InstListNum  = 0x78;   // total instance count for this object (GM.lua: InstListNum)
     vars.Object_InstOff      = 0x10;
+    vars.Object_VarArray     = 0x48;
+    vars.Object_VarNum       = 0x08;
+    vars.Object_VarData      = 0x10;
 
-    vars.Instance_VarArrayOff = 0x10;
+    // Minimum variable count for an instance's own var-array to be considered
+    // a "real" gameplay obj_PlayerManager, as opposed to the lightweight
+    // menu/character-preview decoy instance. Confirmed from logs: decoy's
+    // gameWon sits around var-index ~264-269, real gameplay's sits around
+    // ~779-781 - so a threshold comfortably between those two ranges filters
+    // the decoy out. Print statements below show the actual counts seen;
+    // raise/lower this if it doesn't match your observations.
+    vars.MinRealVarCount = 400;
 
     // --- Initialization Variables ---
     vars.resolved = false;
@@ -25,18 +36,12 @@ startup {
     vars.stringsListAddr = IntPtr.Zero;
     vars.playerManagerObjBase = IntPtr.Zero;
     vars.stringDict = new Dictionary<int, string>();
-
-    // Tracks the last known PlayerManager instance address. Used to detect
-    // when GameMaker destroys and recreates the instance (e.g. leaving the
-    // main menu / starting a new run) so we know to re-scan gameWon's offset,
-    // since a freshly-allocated instance's own var-array hash table can place
-    // "gameWon" at a DIFFERENT offset than the previous instance did.
     vars.lastPmInstance = IntPtr.Zero;
 }
 
 init {
     vars.resolved = false;
-    vars.gameModeOffset = -1;   // re-scan every attach: global var may not exist yet if we attach at the main menu
+    vars.gameModeOffset = -1;
     vars.gameWonOffset  = -1;
     vars.lastPmInstance = IntPtr.Zero;
 
@@ -61,12 +66,6 @@ init {
     if (vars.globalVarsAddr != IntPtr.Zero) print("GlobalVars base found at: " + vars.globalVarsAddr.ToString("X"));
     if (vars.stringsListAddr != IntPtr.Zero) print("StringsList base found at: " + vars.stringsListAddr.ToString("X"));
 
-    // --- Build the String Dictionary once. This is safe to do only here because
-    // string LITERALS (like the names "gameMode"/"gameWon") are baked into the
-    // compiled game and exist from the start — unlike the VARIABLES themselves,
-    // which only get inserted into the global/instance var-array hash table once
-    // the game's code actually assigns them for the first time. That's why the
-    // *variable* scans below have to retry every tick in update(), not just once here.
     var stringDict = new Dictionary<int, string>();
     if (vars.stringsListAddr != IntPtr.Zero) {
         IntPtr sListPtr = game.ReadValue<IntPtr>((IntPtr)vars.stringsListAddr);
@@ -122,16 +121,13 @@ update {
     }
 
     // 2. Resolve gameMode's offset - RETRY EVERY TICK until found.
-    //    Global vars only appear in the var-array once the game code assigns
-    //    them for the first time, so if we attach at the main menu this can
-    //    legitimately fail for a while - keep trying instead of giving up.
     if (vars.globalVarsAddr != IntPtr.Zero && (int)vars.gameModeOffset == -1 && stringDict != null && stringDict.Count > 0) {
         IntPtr gVarsPtr = game.ReadValue<IntPtr>((IntPtr)vars.globalVarsAddr);
         if (gVarsPtr != IntPtr.Zero) {
-            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48);
+            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + (int)vars.Object_VarArray);
             if (varArrayStruct != IntPtr.Zero) {
-                int varNum = game.ReadValue<int>(varArrayStruct + 0x08);
-                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10);
+                int varNum = game.ReadValue<int>(varArrayStruct + (int)vars.Object_VarNum);
+                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + (int)vars.Object_VarData);
                 if (varDataPtr != IntPtr.Zero) {
                     for (int i = 0; i < varNum; i++) {
                         int offset = i * 0x10;
@@ -148,13 +144,13 @@ update {
         }
     }
 
-    // 3. Read gameMode (Global Variable, Pointer Chain: Base -> +48 -> +10 -> +Offset -> +0)
+    // 3. Read gameMode
     if (vars.globalVarsAddr != IntPtr.Zero && (int)vars.gameModeOffset != -1) {
         IntPtr gVarsPtr = game.ReadValue<IntPtr>((IntPtr)vars.globalVarsAddr);
         if (gVarsPtr != IntPtr.Zero) {
-            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48);
+            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + (int)vars.Object_VarArray);
             if (varArrayStruct != IntPtr.Zero) {
-                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10);
+                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + (int)vars.Object_VarData);
                 if (varDataPtr != IntPtr.Zero) {
                     IntPtr finalValuePtr = game.ReadValue<IntPtr>(varDataPtr + (int)vars.gameModeOffset);
                     if (finalValuePtr != IntPtr.Zero) {
@@ -165,38 +161,53 @@ update {
         }
     }
 
-    // 4. Resolve active Instance for PlayerManager
+    // 4. Walk ALL current instances of obj_PlayerManager and pick the "real" one -
+    //    i.e. the one whose OWN var-array has enough variables to be an actual
+    //    gameplay instance, not the lightweight menu/character-preview decoy.
+    //    This does NOT depend on gameMode at all.
+    IntPtr pmInstance = IntPtr.Zero;
     if ((bool)vars.resolved) {
         IntPtr objBase = (IntPtr)vars.playerManagerObjBase;
         IntPtr propPtr = game.ReadValue<IntPtr>(objBase + (int)vars.Object_PropOff);
         if (propPtr != IntPtr.Zero) {
-            IntPtr instList = game.ReadValue<IntPtr>(propPtr + (int)vars.Object_InstListBase);
-            if (instList != IntPtr.Zero) {
-                current.playerManagerInstance = game.ReadValue<IntPtr>(instList + (int)vars.Object_InstOff);
+            int instCount = game.ReadValue<int>(propPtr + (int)vars.Object_InstListNum);
+            IntPtr node = game.ReadValue<IntPtr>(propPtr + (int)vars.Object_InstListBase);
+            int limit = Math.Min(Math.Max(instCount, 0), 64); // sanity cap
+            for (int i = 0; i < limit && node != IntPtr.Zero; i++) {
+                IntPtr candidate = game.ReadValue<IntPtr>(node + (int)vars.Object_InstOff);
+                if (candidate != IntPtr.Zero) {
+                    IntPtr varArrStruct = game.ReadValue<IntPtr>(candidate + (int)vars.Object_VarArray);
+                    if (varArrStruct != IntPtr.Zero) {
+                        int varCount = game.ReadValue<int>(varArrStruct + (int)vars.Object_VarNum);
+                        if (varCount >= (int)vars.MinRealVarCount) {
+                            pmInstance = candidate;
+                            break; // found the real gameplay instance - stop walking
+                        }
+                    }
+                }
+                node = game.ReadValue<IntPtr>(node); // advance to next linked-list node
             }
         }
     }
+    current.playerManagerInstance = pmInstance;
 
-    IntPtr pmInstance = (IntPtr)current.playerManagerInstance;
-
-    // 5. Detect a NEW PlayerManager instance (GameMaker destroyed the old one and
-    //    created a fresh one - e.g. leaving the main menu / starting a new run).
-    //    A fresh instance gets a brand new var-array allocation, whose hash table
-    //    can place "gameWon" at a DIFFERENT offset than the previous instance.
-    //    Force a re-scan whenever the instance address changes.
+    // 5. Detect a NEW real PlayerManager instance (a fresh instance means a
+    //    fresh var-array allocation, whose hash table can place "gameWon" at
+    //    a different offset).
     if (pmInstance != IntPtr.Zero && pmInstance != (IntPtr)vars.lastPmInstance) {
         vars.gameWonOffset = -1;
         vars.lastPmInstance = pmInstance;
-        print("PlayerManager instance changed to 0x" + pmInstance.ToString("X") + " - rescanning gameWon offset.");
+        IntPtr dbgVarArrStruct = game.ReadValue<IntPtr>(pmInstance + (int)vars.Object_VarArray);
+        int dbgVarCount = dbgVarArrStruct != IntPtr.Zero ? game.ReadValue<int>(dbgVarArrStruct + (int)vars.Object_VarNum) : -1;
+        print("Real PlayerManager instance changed to 0x" + pmInstance.ToString("X") + " (varCount=" + dbgVarCount + ") - rescanning gameWon offset.");
     }
 
-    // 6. Once the PlayerManager instance exists, resolve "gameWon"'s offset
-    //    inside ITS OWN var array. Retries every tick until found.
+    // 6. Resolve "gameWon"'s offset inside the (already-filtered) real instance's var array.
     if (pmInstance != IntPtr.Zero && (int)vars.gameWonOffset == -1 && stringDict != null && stringDict.Count > 0) {
-        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48);
+        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + (int)vars.Object_VarArray);
         if (instVarArrayStruct != IntPtr.Zero) {
-            int instVarNum = game.ReadValue<int>(instVarArrayStruct + 0x08);
-            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10);
+            int instVarNum = game.ReadValue<int>(instVarArrayStruct + (int)vars.Object_VarNum);
+            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + (int)vars.Object_VarData);
             if (instVarDataPtr != IntPtr.Zero) {
                 for (int i = 0; i < instVarNum; i++) {
                     int offset = i * 0x10;
@@ -212,11 +223,11 @@ update {
         }
     }
 
-    // 7. Read gameWon (PlayerManager INSTANCE variable)
+    // 7. Read gameWon
     if (pmInstance != IntPtr.Zero && (int)vars.gameWonOffset != -1) {
-        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48);
+        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + (int)vars.Object_VarArray);
         if (instVarArrayStruct != IntPtr.Zero) {
-            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10);
+            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + (int)vars.Object_VarData);
             if (instVarDataPtr != IntPtr.Zero) {
                 IntPtr finalValuePtr = game.ReadValue<IntPtr>(instVarDataPtr + (int)vars.gameWonOffset);
                 if (finalValuePtr != IntPtr.Zero) {
