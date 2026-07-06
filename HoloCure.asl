@@ -14,7 +14,6 @@ startup {
     vars.Object_InstListBase = 0x68;
     vars.Object_InstOff      = 0x10;
 
-    // Instance -> VarArray is only ONE dereference (unlike global's nested +48/+10 struct)
     vars.Instance_VarArrayOff = 0x10;
 
     // --- Initialization Variables ---
@@ -25,27 +24,34 @@ startup {
     vars.globalVarsAddr = IntPtr.Zero;
     vars.stringsListAddr = IntPtr.Zero;
     vars.playerManagerObjBase = IntPtr.Zero;
-    vars.stringDict = new Dictionary<int, string>(); // reused later for gameWon lookup
+    vars.stringDict = new Dictionary<int, string>();
+
+    // Tracks the last known PlayerManager instance address. Used to detect
+    // when GameMaker destroys and recreates the instance (e.g. leaving the
+    // main menu / starting a new run) so we know to re-scan gameWon's offset,
+    // since a freshly-allocated instance's own var-array hash table can place
+    // "gameWon" at a DIFFERENT offset than the previous instance did.
+    vars.lastPmInstance = IntPtr.Zero;
 }
 
 init {
     vars.resolved = false;
-    vars.gameWonOffset = -1; // reset so we re-scan for the new instance's var array
+    vars.gameModeOffset = -1;   // re-scan every attach: global var may not exist yet if we attach at the main menu
+    vars.gameWonOffset  = -1;
+    vars.lastPmInstance = IntPtr.Zero;
+
     var scanner = new SignatureScanner(game, game.MainModule.BaseAddress, game.MainModule.ModuleMemorySize);
 
-    // 1. Resolve Object Array Base Address
     var targetObj = new SigScanTarget(3, (string)vars.ObjectArraySig) {
         OnFound = (p, s, ptr) => ptr + 0x4 + game.ReadValue<int>((IntPtr)ptr)
     };
     vars.symbolAddr = scanner.Scan(targetObj);
 
-    // 2. Resolve Global Variables Pointer
     var targetGlobal = new SigScanTarget(3, (string)vars.GlobalVarsSig) {
         OnFound = (p, s, ptr) => ptr + 0x4 + game.ReadValue<int>((IntPtr)ptr)
     };
     vars.globalVarsAddr = scanner.Scan(targetGlobal);
 
-    // 3. Resolve Strings List Pointer
     var targetStrings = new SigScanTarget(3, (string)vars.StringsListSig) {
         OnFound = (p, s, ptr) => ptr + 0x4 + game.ReadValue<int>((IntPtr)ptr)
     };
@@ -55,7 +61,12 @@ init {
     if (vars.globalVarsAddr != IntPtr.Zero) print("GlobalVars base found at: " + vars.globalVarsAddr.ToString("X"));
     if (vars.stringsListAddr != IntPtr.Zero) print("StringsList base found at: " + vars.stringsListAddr.ToString("X"));
 
-    // --- Build the String Dictionary (used for BOTH global "gameMode" and instance "gameWon" name lookup) ---
+    // --- Build the String Dictionary once. This is safe to do only here because
+    // string LITERALS (like the names "gameMode"/"gameWon") are baked into the
+    // compiled game and exist from the start — unlike the VARIABLES themselves,
+    // which only get inserted into the global/instance var-array hash table once
+    // the game's code actually assigns them for the first time. That's why the
+    // *variable* scans below have to retry every tick in update(), not just once here.
     var stringDict = new Dictionary<int, string>();
     if (vars.stringsListAddr != IntPtr.Zero) {
         IntPtr sListPtr = game.ReadValue<IntPtr>((IntPtr)vars.stringsListAddr);
@@ -74,41 +85,15 @@ init {
             }
         }
     }
-    vars.stringDict = stringDict; // saved for use in update() when resolving gameWon
-
-    // --- Dynamic "gameMode" Offset Resolution (this one IS global) ---
-    if (vars.globalVarsAddr != IntPtr.Zero) {
-        IntPtr gVarsPtr = game.ReadValue<IntPtr>((IntPtr)vars.globalVarsAddr);
-        if (gVarsPtr != IntPtr.Zero) {
-            // According to CE: gml_GlobalVariables -> +48
-            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48);
-            if (varArrayStruct != IntPtr.Zero) {
-                int varNum = game.ReadValue<int>(varArrayStruct + 0x08);
-                // According to CE: varArrayStruct -> +10 (Start of VarData)
-                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10);
-                for (int i = 0; i < varNum; i++) {
-                    int offset = i * 0x10; // Standard YYValue 16-byte multiplier
-                    int nameID = game.ReadValue<int>(varDataPtr + offset + 0x08);
-                    string varName;
-                    if (stringDict.TryGetValue(nameID, out varName) && varName == "gameMode") {
-                        vars.gameModeOffset = offset;
-                        print("Success: Dynamic gameMode offset resolved at 0x" + offset.ToString("X"));
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    // NOTE: gameWon is NOT resolved here — it lives in the PlayerManager INSTANCE's
-    // own var array, which only exists once the instance is spawned. It gets
-    // resolved dynamically in update(), once current.playerManagerInstance != Zero.
+    vars.stringDict = stringDict;
 }
 
 update {
-    // Default current values to zero/empty to avoid property errors in old object
     current.playerManagerInstance = IntPtr.Zero;
     current.gameMode = 0.0;
     current.gameWon = 0.0;
+
+    var stringDict = vars.stringDict as Dictionary<int, string>;
 
     // 1. Search for obj_PlayerManager until found in memory
     if (!(bool)vars.resolved && vars.symbolAddr != IntPtr.Zero) {
@@ -136,15 +121,42 @@ update {
         }
     }
 
-    // 2. Read gameMode (Global Variable, Pointer Chain: Base -> +48 -> +10 -> +Offset -> +0)
+    // 2. Resolve gameMode's offset - RETRY EVERY TICK until found.
+    //    Global vars only appear in the var-array once the game code assigns
+    //    them for the first time, so if we attach at the main menu this can
+    //    legitimately fail for a while - keep trying instead of giving up.
+    if (vars.globalVarsAddr != IntPtr.Zero && (int)vars.gameModeOffset == -1 && stringDict != null && stringDict.Count > 0) {
+        IntPtr gVarsPtr = game.ReadValue<IntPtr>((IntPtr)vars.globalVarsAddr);
+        if (gVarsPtr != IntPtr.Zero) {
+            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48);
+            if (varArrayStruct != IntPtr.Zero) {
+                int varNum = game.ReadValue<int>(varArrayStruct + 0x08);
+                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10);
+                if (varDataPtr != IntPtr.Zero) {
+                    for (int i = 0; i < varNum; i++) {
+                        int offset = i * 0x10;
+                        int nameID = game.ReadValue<int>(varDataPtr + offset + 0x08);
+                        string varName;
+                        if (stringDict.TryGetValue(nameID, out varName) && varName == "gameMode") {
+                            vars.gameModeOffset = offset;
+                            print("Success: Dynamic gameMode offset resolved at 0x" + offset.ToString("X"));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Read gameMode (Global Variable, Pointer Chain: Base -> +48 -> +10 -> +Offset -> +0)
     if (vars.globalVarsAddr != IntPtr.Zero && (int)vars.gameModeOffset != -1) {
         IntPtr gVarsPtr = game.ReadValue<IntPtr>((IntPtr)vars.globalVarsAddr);
         if (gVarsPtr != IntPtr.Zero) {
-            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48); // Chain +48
+            IntPtr varArrayStruct = game.ReadValue<IntPtr>(gVarsPtr + 0x48);
             if (varArrayStruct != IntPtr.Zero) {
-                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10); // Chain +10
+                IntPtr varDataPtr = game.ReadValue<IntPtr>(varArrayStruct + 0x10);
                 if (varDataPtr != IntPtr.Zero) {
-                    IntPtr finalValuePtr = game.ReadValue<IntPtr>(varDataPtr + (int)vars.gameModeOffset); // Chain +Offset
+                    IntPtr finalValuePtr = game.ReadValue<IntPtr>(varDataPtr + (int)vars.gameModeOffset);
                     if (finalValuePtr != IntPtr.Zero) {
                         current.gameMode = game.ReadValue<double>(finalValuePtr);
                     }
@@ -153,7 +165,7 @@ update {
         }
     }
 
-    // 3. Resolve active Instance for PlayerManager
+    // 4. Resolve active Instance for PlayerManager
     if ((bool)vars.resolved) {
         IntPtr objBase = (IntPtr)vars.playerManagerObjBase;
         IntPtr propPtr = game.ReadValue<IntPtr>(objBase + (int)vars.Object_PropOff);
@@ -165,41 +177,50 @@ update {
         }
     }
 
-    // 4. Once the PlayerManager instance exists, resolve "gameWon"'s offset
-    //    inside ITS OWN var array (same 2-level structure as the global var array: +0x48 -> +0x10)
-    IntPtr pmInstance = (IntPtr)current.playerManagerInstance; // explicit cast: avoid dynamic dispatch on extension methods
-    if (pmInstance != IntPtr.Zero && (int)vars.gameWonOffset == -1) {
-        var stringDict = vars.stringDict as Dictionary<int, string>;
-        if (stringDict != null && stringDict.Count > 0) {
-            IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48); // Chain +48 (same as global)
-            if (instVarArrayStruct != IntPtr.Zero) {
-                int instVarNum = game.ReadValue<int>(instVarArrayStruct + 0x08); // actual variable count
-                IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10); // Chain +10 (real var data)
-                if (instVarDataPtr != IntPtr.Zero) {
-                    for (int i = 0; i < instVarNum; i++) {
-                        int offset = i * 0x10; // Standard YYValue 16-byte multiplier
-                        int nameID = game.ReadValue<int>(instVarDataPtr + offset + 0x08);
-                        string varName;
-                        if (stringDict.TryGetValue(nameID, out varName) && varName == "gameWon") {
-                            vars.gameWonOffset = offset;
-                            print("Success: Dynamic gameWon offset resolved at 0x" + offset.ToString("X"));
-                            break;
-                        }
+    IntPtr pmInstance = (IntPtr)current.playerManagerInstance;
+
+    // 5. Detect a NEW PlayerManager instance (GameMaker destroyed the old one and
+    //    created a fresh one - e.g. leaving the main menu / starting a new run).
+    //    A fresh instance gets a brand new var-array allocation, whose hash table
+    //    can place "gameWon" at a DIFFERENT offset than the previous instance.
+    //    Force a re-scan whenever the instance address changes.
+    if (pmInstance != IntPtr.Zero && pmInstance != (IntPtr)vars.lastPmInstance) {
+        vars.gameWonOffset = -1;
+        vars.lastPmInstance = pmInstance;
+        print("PlayerManager instance changed to 0x" + pmInstance.ToString("X") + " - rescanning gameWon offset.");
+    }
+
+    // 6. Once the PlayerManager instance exists, resolve "gameWon"'s offset
+    //    inside ITS OWN var array. Retries every tick until found.
+    if (pmInstance != IntPtr.Zero && (int)vars.gameWonOffset == -1 && stringDict != null && stringDict.Count > 0) {
+        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48);
+        if (instVarArrayStruct != IntPtr.Zero) {
+            int instVarNum = game.ReadValue<int>(instVarArrayStruct + 0x08);
+            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10);
+            if (instVarDataPtr != IntPtr.Zero) {
+                for (int i = 0; i < instVarNum; i++) {
+                    int offset = i * 0x10;
+                    int nameID = game.ReadValue<int>(instVarDataPtr + offset + 0x08);
+                    string varName;
+                    if (stringDict.TryGetValue(nameID, out varName) && varName == "gameWon") {
+                        vars.gameWonOffset = offset;
+                        print("Success: Dynamic gameWon offset resolved at 0x" + offset.ToString("X"));
+                        break;
                     }
                 }
             }
         }
     }
 
-    // 5. Read gameWon (PlayerManager INSTANCE variable, Pointer Chain: instance -> +0x48 -> +0x10 -> +Offset -> +0)
+    // 7. Read gameWon (PlayerManager INSTANCE variable)
     if (pmInstance != IntPtr.Zero && (int)vars.gameWonOffset != -1) {
-        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48); // Chain +48
+        IntPtr instVarArrayStruct = game.ReadValue<IntPtr>(pmInstance + 0x48);
         if (instVarArrayStruct != IntPtr.Zero) {
-            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10); // Chain +10
+            IntPtr instVarDataPtr = game.ReadValue<IntPtr>(instVarArrayStruct + 0x10);
             if (instVarDataPtr != IntPtr.Zero) {
-                IntPtr finalValuePtr = game.ReadValue<IntPtr>(instVarDataPtr + (int)vars.gameWonOffset); // Chain +Offset
+                IntPtr finalValuePtr = game.ReadValue<IntPtr>(instVarDataPtr + (int)vars.gameWonOffset);
                 if (finalValuePtr != IntPtr.Zero) {
-                    current.gameWon = game.ReadValue<double>(finalValuePtr); // Dereference to get the actual double value (+0)
+                    current.gameWon = game.ReadValue<double>(finalValuePtr);
                 }
             }
         }
@@ -219,7 +240,6 @@ split {
     var oldDict = old as IDictionary<string, object>;
     if (!oldDict.ContainsKey("gameWon")) return false;
 
-    // Split when gameWon changes from 0 to 1 (victory achieved)
     bool shouldSplit = old.gameWon == 0.0 && current.gameWon == 1.0;
     if (shouldSplit) print("Split: gameWon switched from 0 to 1.");
     return shouldSplit;
