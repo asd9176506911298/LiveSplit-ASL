@@ -15,6 +15,8 @@ startup
 
     vars.NODE_NAME_OFFSET                    = 0x130; // StringName                        Node::Data::name
     vars.NODE_CHILDREN_OFFSET                = 0x108; // HashMap<StringName, Node*>        Node::Data::children
+
+    settings.Add("splitWave", false, "Split on Wave Increase (current_wave)");
 }
 
 init
@@ -70,9 +72,11 @@ init
             IntPtr namePtr = game.ReadValue<IntPtr>(node + 0x30);
             string memberName = vars.ReadStringName(namePtr);
             int index = game.ReadValue<int>(node + 0x38);
-
             if (!string.IsNullOrEmpty(memberName))
+            {
                 result[memberName] = (index * 0x18) + 0x8;
+                // print(string.Format("Member: {0}, Index: {1}, Offset: 0x{2:X}", memberName, index, result[memberName]));
+            }
 
             IntPtr left  = game.ReadValue<IntPtr>(node + 0x08);
             IntPtr right = game.ReadValue<IntPtr>(node + 0x10);
@@ -98,6 +102,12 @@ init
     IntPtr rootWindowAddr = (IntPtr)(sceneTreePtr0 + (int)vars.SCENETREE_ROOT_WINDOW_OFFSET);
     vars.rootWindow = game.ReadValue<IntPtr>(rootWindowAddr);
 
+    var runData = vars.FindChild(vars.rootWindow, "RunData");
+    var runDataInstance = game.ReadValue<IntPtr>((IntPtr)(runData + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    var runDatascriptRef = game.ReadValue<IntPtr>((IntPtr)(runDataInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET));
+    vars.runDataOffsets = vars.GetMemberOffsets(runDatascriptRef);
+    vars.runDataMember  = game.ReadValue<IntPtr>((IntPtr)(runDataInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
+
     vars.main = IntPtr.Zero;
     vars.mainOffsets = null;
     vars.mainMember = IntPtr.Zero;
@@ -107,6 +117,9 @@ init
 
     vars.currentIsRunWon = (byte)0;
     vars.oldIsRunWon = (byte)0;
+
+    vars.currentWave = 0L;
+    vars.oldWave = 0L;
 }
 update
 {
@@ -159,8 +172,18 @@ update
     }
 
     vars.oldIsRunWon = vars.currentIsRunWon;
-    int runWonOffset = (int)vars.mainOffsets["_is_run_won"];
-    vars.currentIsRunWon = game.ReadValue<byte>((IntPtr)(vars.mainMember + runWonOffset));
+    if (vars.mainOffsets != null && vars.mainOffsets.ContainsKey("_is_run_won"))
+    {
+        int runWonOffset = (int)vars.mainOffsets["_is_run_won"];
+        vars.currentIsRunWon = game.ReadValue<byte>((IntPtr)(vars.mainMember + runWonOffset));
+    }
+
+    if (vars.runDataMember != IntPtr.Zero && vars.runDataOffsets.ContainsKey("current_wave"))
+    {
+        vars.oldWave = vars.currentWave;
+        int waveOffset = vars.runDataOffsets["current_wave"];
+        vars.currentWave = game.ReadValue<long>((IntPtr)(vars.runDataMember + waveOffset));
+    }
 }
 
 split
@@ -168,6 +191,12 @@ split
     if (vars.oldIsRunWon == 0 && vars.currentIsRunWon == 1)
     {
         print("Detect Win _is_run_won 0 -> 1 Split!");
+        return true;
+    }
+
+     if (settings["splitWave"] && vars.currentWave > vars.oldWave)
+    {
+        print(string.Format("Detect Wave Change!{0} -> {1}，Trigger Split！", vars.oldWave, vars.currentWave));
         return true;
     }
 }
