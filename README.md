@@ -53,3 +53,5 @@ https://store.steampowered.com/app/4197610/Librarian_Tidy_Up_the_Arcane_Library
 https://store.steampowered.com/app/3844970/Burglin_Gnomes
 
 https://store.steampowered.com/app/2420510/HoloCure__Save_the_Fans
+
+https://store.steampowered.com/app/1942280/Brotato
