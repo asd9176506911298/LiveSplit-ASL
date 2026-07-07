@@ -18,6 +18,8 @@ startup
 
     vars.NODE_NAME_OFFSET                    = 0x150; // StringName                        Node::Data::name
     vars.NODE_CHILDREN_OFFSET                = 0x128; // HashMap<StringName, Node*>        Node::Data::children
+
+    settings.Add("splitWave", false, "Split on Wave Increase (current_wave)");
 }
 
 init
@@ -110,7 +112,7 @@ init
         if (!string.IsNullOrEmpty(memberName))
         {
             result[memberName] = (index * 0x18) + 0x8;
-            print(string.Format("找到變數: {0}, Index: {1}, Offset: 0x{2:X}", memberName, index, result[memberName]));
+            // print(string.Format("找到變數: {0}, Index: {1}, Offset: 0x{2:X}", memberName, index, result[memberName]));
         }
 
         // 5. 取得左右子節點 (在 +0x08 和 +0x10)
@@ -170,6 +172,12 @@ init
     // var TitleScreen = vars.FindChild(rootWindow, "TitleScreen");
     // GetMemberOffsets(game.ReadValue<IntPtr>((IntPtr)(main + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET)));
 
+    var runData = vars.FindChild(vars.rootWindow, "RunData");
+    var runDataInstance = game.ReadValue<IntPtr>((IntPtr)(runData + vars.OBJECT_SCRIPT_INSTANCE_OFFSET));
+    var runDatascriptRef = game.ReadValue<IntPtr>((IntPtr)(runDataInstance + vars.SCRIPTINSTANCE_SCRIPT_REF_OFFSET));
+    vars.runDataOffsets = vars.GetMemberOffsets(runDatascriptRef);
+    vars.runDataMember  = game.ReadValue<IntPtr>((IntPtr)(runDataInstance + vars.SCRIPTINSTANCE_MEMBERS_OFFSET));
+
     vars.main = IntPtr.Zero;
     vars.mainOffsets = null;
     vars.mainMember = IntPtr.Zero;
@@ -177,6 +185,9 @@ init
     vars.lastIsRunWon = (byte)255;
     vars.currentIsRunWon = (byte)0;
     vars.oldIsRunWon = (byte)0;
+
+    vars.currentWave = 0L;
+    vars.oldWave = 0L;
 }
 
 update
@@ -217,17 +228,33 @@ update
     vars.oldIsRunWon = vars.currentIsRunWon;
     int runWonOffset = (int)vars.mainOffsets["_is_run_won"];
     vars.currentIsRunWon = game.ReadValue<byte>((IntPtr)(vars.mainMember + runWonOffset));
+
+    // === 讀取 current_wave (RunData 在 init 已抓好，這裡直接讀值) ===
+    if (vars.runDataMember != IntPtr.Zero && vars.runDataOffsets.ContainsKey("current_wave"))
+    {
+        vars.oldWave = vars.currentWave;
+        int waveOffset = vars.runDataOffsets["current_wave"];
+        vars.currentWave = game.ReadValue<long>((IntPtr)(vars.runDataMember + waveOffset));
+    }
 }
 
 split
 {
-    // 判斷：舊值是 0，且新值變成了 1
+    // 判斷：舊值是 0，且新值變成了 1 (通關)
     if (vars.oldIsRunWon == 0 && vars.currentIsRunWon == 1)
     {
         print("檢測到通關！_is_run_won 從 0 變 1，觸發 Split！");
         return true; 
     }
+
+    // 判斷：Wave 增加 (需要在設定裡勾選 splitWave)
+    if (settings["splitWave"] && vars.currentWave > vars.oldWave)
+    {
+        print(string.Format("檢測到 Wave 變化！{0} -> {1}，觸發 Split！", vars.oldWave, vars.currentWave));
+        return true;
+    }
 }
+
 start
 {
     if (old.sceneName != "Main" && current.sceneName == "Main")
