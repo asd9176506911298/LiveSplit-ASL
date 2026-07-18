@@ -15,7 +15,7 @@ init
     vars.JitSave.SetOuter("GameAssembly.dll", "");
 
     IntPtr hBallDispenser = vars.JitSave.AddFlag("BallDispenser", "LocalPlayerInteract");
-    IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "<ServerInformFellIn>g__HandleBall|20_0");
+    IntPtr hGolfHole      = vars.JitSave.AddFlag("GolfHole", "ServerOnBallScored");
     IntPtr hCancelMatch   = vars.JitSave.AddFlag("CourseManager", "EndCourse");
     IntPtr hStartMatch    = vars.JitSave.AddFlag("MatchSetupMenu", "StartOrCancelMatch");
 
@@ -35,6 +35,11 @@ update
 {
     vars.Uhara.Update();
     current.activeScene = vars.Utils.GetActiveSceneName() ?? current.activeScene;
+
+    // if (current.activeScene != old.activeScene)
+    // {
+    //     vars.Uhara.Log("Scene changed: " + current.activeScene);
+    // }
 }
 
 start
