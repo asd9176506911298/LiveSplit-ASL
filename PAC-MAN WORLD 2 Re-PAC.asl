@@ -9,7 +9,8 @@ init
 {
     vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
 
-    vars.Instance.Watch<int>("m_step", "Assembly-CSharp:UI.Title.Select:TitleSelectUI", "m_step");
+    vars.Instance.Watch<int>("m_step", "Assembly-CSharp:UI:GameLevelSelect", "m_step");
+    vars.Instance.Watch<int>("m_selectIdx", "Assembly-CSharp:UI:GameLevelSelect", "m_selectIdx");
 }
 
 update
@@ -20,11 +21,16 @@ update
     {
         print("m_step: " + current.m_step.ToString());
     }
+
+    if(current.m_selectIdx != old.m_selectIdx)
+    {
+        print("m_selectIdx: " + current.m_selectIdx.ToString());
+    }
 }
 
 start
 {
-    if(old.m_step != 0 && current.m_step == 0)
+    if(old.m_step != 0 && current.m_step == 6 && current.m_selectIdx == 0)
     {
         print("Start");
         return true;
