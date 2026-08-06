@@ -121,11 +121,13 @@ init
 
 start
 {
-    // 只搜索一次，之后直接用缓存的指针
+    // Only search once, then reuse the cached pointer
     if (vars.videoGO == IntPtr.Zero)
+        // Path: Scripted House OFF/Section 1 - Break into house/Scene 1 Intro House OFF/Van/Present Day Canvas OFF
         vars.videoGO = vars.FindGameObject("Van");
 
     if (vars.titleTransform == IntPtr.Zero)
+        // Path: Scriped Mall OFF/Easter Photo Intro ON/Presents Canvas
         vars.titleTransform = vars.FindGameObject("Easter Photo Intro ON");
 
     bool vanTriggered = false;
@@ -144,5 +146,12 @@ start
         easterTriggered = vars.TransformGetIsActive(easterChild);
     }
 
+    // Start triggers if either branch fires (Van branch OR Easter Mall branch)
     return vanTriggered || easterTriggered;
+}
+
+reset
+{
+    vars.videoGO = IntPtr.Zero;
+    vars.titleTransform = IntPtr.Zero;
 }
