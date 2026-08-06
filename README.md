@@ -63,3 +63,11 @@ https://store.steampowered.com/app/2324290/PACMAN_WORLD_2_RePAC/
 - https://youtu.be/xJYDmtdw5-Q
 
 - https://youtu.be/s6UVAub_fe8
+
+https://puppetcombo.com/nightripper/
+
+- https://youtu.be/PVDHM94wyqg
+
+- https://youtu.be/iL77c2KEkug
+
+- https://youtu.be/11L6EL7Nxfs
