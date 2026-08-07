@@ -7,6 +7,11 @@ init
 {
     vars.videoGO = IntPtr.Zero;
     vars.titleTransform = IntPtr.Zero;
+    vars.tomDeathTransform = IntPtr.Zero;
+    vars.tomDeathWasActive = false;
+    vars.CarEndTransform = IntPtr.Zero;
+    vars.CarEndWasActive = false;
+    vars.isStart1985 = false;
 
     // 1. Traverse the doubly linked list of GameObjects
     vars.ReadGameObjectList = (Func<IntPtr, List<IntPtr>>)(listHeadPtr => 
@@ -144,14 +149,64 @@ start
         var easterTransform = vars.GameObjectGetTransform(vars.titleTransform);
         var easterChild = vars.TransformGetChildByName(easterTransform, "Presents Canvas");
         easterTriggered = vars.TransformGetIsActive(easterChild);
+        if(easterTriggered)
+          vars.isStart1985 = true;
     }
 
     // Start triggers if either branch fires (Van branch OR Easter Mall branch)
     return vanTriggered || easterTriggered;
 }
 
-reset
+update
+{
+    if ((IntPtr)vars.tomDeathTransform == IntPtr.Zero)
+    {
+        var sectionGO = vars.FindGameObject("Section 5 - Escaping");
+        if (sectionGO != IntPtr.Zero)
+        {
+            var sectionTransform = vars.GameObjectGetTransform(sectionGO);
+            vars.tomDeathTransform = vars.TransformGetChildByName(sectionTransform, "Tom Death End OFF");
+        }
+    }
+    
+    if ((IntPtr)vars.CarEndTransform == IntPtr.Zero)
+    {
+        var CarParentGO = vars.FindGameObject("Section 6 - Post Credits OFF");
+        if (CarParentGO != IntPtr.Zero)
+        {
+            var sectionTransform = vars.GameObjectGetTransform(CarParentGO);
+            vars.CarEndTransform = vars.TransformGetChildByName(sectionTransform, "Cutscene 12 - Driving End OFF");
+        }
+    }
+}
+
+split
+{   
+    if(!vars.isStart1985)
+    {
+        bool isActive = vars.TransformGetIsActive(vars.tomDeathTransform);
+        bool triggered = isActive && !vars.tomDeathWasActive;
+
+        vars.tomDeathWasActive = isActive;
+        return triggered;
+    }
+    else
+    {
+        bool isActive = vars.TransformGetIsActive(vars.CarEndTransform);
+        bool triggered = isActive && !vars.CarEndWasActive;
+
+        vars.CarEndWasActive = isActive;
+        return triggered;
+    }
+}
+
+onReset
 {
     vars.videoGO = IntPtr.Zero;
     vars.titleTransform = IntPtr.Zero;
+    vars.tomDeathTransform = IntPtr.Zero;
+    vars.tomDeathWasActive = false;
+    vars.CarEndTransform = IntPtr.Zero;
+    vars.CarEndWasActive = false;
+    vars.isStart1985 = false;
 }
