@@ -159,7 +159,7 @@ start
 
 update
 {
-    if ((IntPtr)vars.tomDeathTransform == IntPtr.Zero)
+    if (!vars.isStart1985 && (IntPtr)vars.tomDeathTransform == IntPtr.Zero)
     {
         var sectionGO = vars.FindGameObject("Section 5 - Escaping");
         if (sectionGO != IntPtr.Zero)
@@ -169,7 +169,7 @@ update
         }
     }
     
-    if ((IntPtr)vars.CarEndTransform == IntPtr.Zero)
+    if (vars.isStart1985 && (IntPtr)vars.CarEndTransform == IntPtr.Zero)
     {
         var CarParentGO = vars.FindGameObject("Section 6 - Post Credits OFF");
         if (CarParentGO != IntPtr.Zero)
