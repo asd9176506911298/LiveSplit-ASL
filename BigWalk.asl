@@ -11,6 +11,7 @@ init
 
     vars.Instance.Watch<bool>("startFlag", "PeckManager", "<isReadyForEffects>k__BackingField");
     vars.Instance.Watch<bool>("EndFlag", "MainMenuManager", "congratsMenu", "continueButton", "0x10", "0x20", "0x46");
+    // 0x10 -> 0x20 -> 0x46 | m_CachedPtr -> GameObject -> activeSelf
 }
 
 update
