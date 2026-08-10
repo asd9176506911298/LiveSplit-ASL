@@ -9,9 +9,9 @@ init
 {
     vars.JitSave = vars.Uhara.CreateTool("Unity", "IL2CPP", "JitSave");
 
-    vars.Resolver.Watch<ulong>("startFlag", vars.JitSave.AddFlag("GameStartBlind", "Awake"));
-    
     vars.JitSave.ProcessQueue();
+    
+    vars.Resolver.Watch<ulong>("startFlag", vars.JitSave.AddFlag("GameStartBlind", "Awake"));
 }
 
 update
