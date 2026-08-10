@@ -7,11 +7,9 @@ startup
 
 init
 {
-    vars.JitSave = vars.Uhara.CreateTool("Unity", "IL2CPP", "JitSave");
+    vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
 
-    vars.JitSave.ProcessQueue();
-    
-    vars.Resolver.Watch<ulong>("startFlag", vars.JitSave.AddFlag("GameStartBlind", "Awake"));
+    vars.Instance.Watch<bool>("isReadyForEffects", "PeckManager", "<isReadyForEffects>k__BackingField");
 }
 
 update
@@ -21,7 +19,7 @@ update
 
 start
 {
-    if(current.startFlag != old.startFlag)
+    if (!old.isReadyForEffects && current.isReadyForEffects)
     {
         return true;
     }
