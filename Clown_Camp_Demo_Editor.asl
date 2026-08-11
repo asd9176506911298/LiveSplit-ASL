@@ -89,7 +89,7 @@ init
             string memberName = vars.ReadStringName(namePtr);
             var index         = game.ReadValue<int>(curNode + 0x18);
             var offset = index * memberSize + 0x8;
-            // print("memberName: " + memberName + " " + "offset: " + offset.ToString("X"));
+            print("memberName: " + memberName + " " + "offset: " + offset.ToString("X"));
 
             if (!string.IsNullOrEmpty(memberName))
                 result[memberName] = offset;
@@ -242,5 +242,19 @@ start
         vars.pendingStart = false;
         return true;
     }
+    return false;
+}
+
+split
+{
+    // 場景為 initiation_room，且 isSwitching 從 false -> true 的瞬間 (按下 Exit Slide 的 Yes)
+    if (vars.currentSceneKey == "initiation_room"
+        && vars.previousIsSwitching == false
+        && vars.isSwitching == true)
+    {
+        print("SPLIT: Exit Slide used in initiation_room");
+        return true;
+    }
+
     return false;
 }
