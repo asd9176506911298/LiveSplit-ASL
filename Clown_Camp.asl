@@ -20,6 +20,18 @@ startup
 
     // GDScript
     vars.GDSCRIPT_MEMBER_MAP_OFFSET          = 0x178; // HashMap<StringName, MemberInfo>   GDScript::member_indices
+
+    if (timer.CurrentTimingMethod != TimingMethod.GameTime)
+    {
+        var mbox = System.Windows.Forms.MessageBox.Show(
+            timer.Form,
+            "Removing loads from this game requires comparing against Game Time.\nWould you like to switch to it?",
+            "LiveSplit | Clown Camp",
+            System.Windows.Forms.MessageBoxButtons.YesNo,
+            System.Windows.Forms.MessageBoxIcon.Question
+        );
+        if (mbox == System.Windows.Forms.DialogResult.Yes) timer.CurrentTimingMethod = TimingMethod.GameTime;
+    }
 }
 
 init
