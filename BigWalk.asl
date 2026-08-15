@@ -18,7 +18,6 @@ startup
         { "ScrewTower",    new int[] { 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174 } },
     };
 
-    // Tower key -> display name (for settings)
     vars.GroupNames = new Dictionary<string, string>
     {
         { "TutorialTower", "Tutorial Tower" },
@@ -30,13 +29,11 @@ startup
         { "ScrewTower",    "Screw Tower" },
     };
 
-    // Preserve display order (Dictionary iteration order isn't guaranteed)
     vars.GroupOrder = new List<string>
     {
         "TutorialTower", "RedTower", "GreenTower", "YellowTower", "BlueTower", "FinalTower", "ScrewTower"
     };
 
-    // Track which towers have already triggered a split, to prevent duplicate splits
     vars.CompletedGroups = new HashSet<string>();
 
     // ===== Settings tree =====
@@ -44,9 +41,11 @@ startup
 
     foreach (string key in vars.GroupOrder)
     {
-        // parent = "SplitGourd" -> shows as a nested child option under SplitGourd
         settings.Add(key, true, vars.GroupNames[key], "SplitGourd");
     }
+
+    // Independent option: split every time a gourd becomes Loose (Locked -> Loose transition)
+    settings.Add("PuzzleCompleted", false, "Split on Puzzle Completed Gourd(Locked -> Loose)");
 }
 
 init
@@ -55,10 +54,21 @@ init
 
     vars.Instance.Watch<bool>("startFlag", "PeckManager", "<isReadyForEffects>k__BackingField");
     vars.Instance.Watch<bool>("EndFlag", "MainMenuManager", "congratsMenu", "continueButton", "0x10", "0x20", "0x46");
-    // 0x10 -> 0x20 -> 0x46 | m_CachedPtr -> GameObject -> activeSelf
 
     vars.Instance.Watch<IntPtr>("PropHomes", "PropHome", "allPropHomes", "_items");
     vars.Instance.Watch<int>("PropHomeCount", "PropHome", "allPropHomes", "_size");
+
+    // ===== JitSave hook: capture newValue (r8) from OnChangeGourdState(oldValue, newValue) =====
+    vars.JitSave = vars.Uhara.CreateTool("Unity", "IL2CPP", "JitSave");
+
+    // "mov [rip-8], r8" — captures newValue (rdx/oldValue is already destroyed by this offset, r8/newValue survives intact)
+    byte[] AsmMovR8RelativeStorage = new byte[] { 0x4C, 0x89, 0x05, 0xF1, 0xFF, 0xFF, 0xFF, 0x90 };
+
+    IntPtr pGourdNewState = vars.JitSave.Add("Assembly-CSharp", "", "RewardGourd", "OnChangeGourdState", 2, 11, 0, AsmMovR8RelativeStorage);
+
+    vars.Resolver.Watch<int>("gourdNewState", pGourdNewState);
+
+    vars.JitSave.ProcessQueue();
 }
 
 update
@@ -68,7 +78,6 @@ update
     if (current.PropHomes == IntPtr.Zero || current.PropHomeCount <= 0)
         return;
 
-    // Scan all PropHomes once, collect the set of SaveableHomeName values that already have a Gourd placed in them
     var filledHomes = new HashSet<int>();
 
     for (int i = 0; i < current.PropHomeCount; i++)
@@ -105,15 +114,18 @@ split
         return true;
     }
 
-    // Master switch off -> skip all Gourd tower checks entirely
+    // ===== Hook-based split: fires only on the moment newState transitions TO Loose(1) =====
+    if (settings["PuzzleCompleted"] && current.gourdNewState == 1 && old.gourdNewState != 1)
+    {
+        return true;
+    }
+
     if (!settings["SplitGourd"]) return false;
     if (vars.FilledHomes == null) return false;
 
     foreach (string key in vars.GroupOrder)
     {
         if (vars.CompletedGroups.Contains(key)) continue;
-
-        // This tower isn't checked -> skip it, don't check or split for it
         if (!settings[key]) continue;
 
         int[] homes = vars.GroupHomes[key];
@@ -131,7 +143,7 @@ split
         if (allFilled)
         {
             vars.CompletedGroups.Add(key);
-            return true; // This tower just got completed -> split once
+            return true;
         }
     }
 
