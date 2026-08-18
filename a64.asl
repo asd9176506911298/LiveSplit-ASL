@@ -13,6 +13,8 @@ init
 {
     // 緩存變數初始化
     vars.CachedTimerManaged = IntPtr.Zero;
+    vars.ManagerComponent = IntPtr.Zero;
+    vars.StaticField = IntPtr.Zero;
 
     // 1. 讀取雙向鏈結串列 (x64 BaseLinkedListNode: +0x00 Next, +0x08 BaseObject*)
     vars.ReadGameObjectList = (Func<IntPtr, List<IntPtr>>)(listHeadPtr => 
@@ -127,19 +129,117 @@ init
         return game.ReadValue<double>(managedObjPtr + 0x20);
     });
 
+    vars.GetStaticFields = (Func<IntPtr, IntPtr>)(nativeObjPtr => 
+    {
+        if (nativeObjPtr == IntPtr.Zero) return IntPtr.Zero;
+
+        return game.ReadPointer(nativeObjPtr + 0xB8);
+    });
+
+    vars.GetManagerMissions = (Func<IntPtr, IntPtr>)(nativeObjPtr => 
+    {
+        if (nativeObjPtr == IntPtr.Zero) return IntPtr.Zero;
+
+        return game.ReadPointer(nativeObjPtr + 0x50);
+    });
+
+    vars.CheckAllObjectivesAccomplished = (Func<IntPtr, bool>)(missionPtr =>
+    {
+        if (missionPtr == IntPtr.Zero) return false;
+
+        IntPtr listPtr = game.ReadPointer(missionPtr + 0x48); // List<Objective>
+        if (listPtr == IntPtr.Zero) return false;
+
+        IntPtr itemsArrayPtr = game.ReadPointer(listPtr + 0x10); // _items
+        int size = game.ReadValue<int>(listPtr + 0x18);          // _size
+
+        if (itemsArrayPtr == IntPtr.Zero || size <= 0) return false;
+
+        bool hasValidObjective = false; // 用來確保至少有一個有效 Objective 被檢查過
+
+        for (int i = 0; i < size; i++)
+        {
+            IntPtr objPtr = game.ReadPointer(itemsArrayPtr + 0x20 + (i * 0x8));
+            if (objPtr == IntPtr.Zero) continue; // 空指標直接跳過，不影響判定
+
+            int currentNumber = game.ReadValue<int>(objPtr + 0x34); // Objective.CurrentNumber
+            if (currentNumber == 0) continue; // CurrentNumber == 0 -> 跳過此 Objective
+
+            bool accomplished = game.ReadValue<bool>(objPtr + 0x30); // Objective.Accomplished
+            hasValidObjective = true;
+
+            if (!accomplished) return false; // 只要有一個「有效且未完成」就不算
+        }
+
+        return hasValidObjective; // 全部有效的都 Accomplished == true 才回傳 true
+    });
+
+    // 8. 嘗試快取 managerComponent + staticField (只需成功一次)
+    vars.TryCacheManager = (Func<bool>)(() =>
+    {
+        IntPtr managerObj = vars.FindGameObject("~CodexRPG");
+        if (managerObj == IntPtr.Zero) return false;
+
+        IntPtr managerComponent = vars.GetComponentByIndex(managerObj, 1);
+        if (managerComponent == IntPtr.Zero) return false;
+
+        IntPtr klassPtr = game.ReadPointer(managerComponent);
+        if (klassPtr == IntPtr.Zero) return false;
+
+        IntPtr staticField = vars.GetStaticFields(klassPtr);
+        if (staticField == IntPtr.Zero) return false;
+
+        vars.ManagerComponent = managerComponent;
+        vars.StaticField = staticField;
+
+        print("[Cached] ManagerComponent: " + managerComponent.ToString("X") + 
+            " StaticField: " + staticField.ToString("X"));
+
+        return true;
+    });
+
     vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
+    vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
+
+    vars.Instance.Watch<IntPtr>("Agent", "Agent");
     vars.Instance.Watch<float>("xVel", "Agent", "0xE0", "0x48");
     vars.Instance.Watch<float>("yVel", "Agent", "0xE0", "0x50");
+
+    // 先嘗試抓一次 (若此時遊戲已在場景中)
+    vars.TryCacheManager();
 }
 
 update
 {
     vars.Uhara.Update();
 
+    current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
+
+    if(current.ActiveScene != old.ActiveScene)
+    {
+        print("old.ActiveScene: " + old.ActiveScene + " - > current.ActiveScene: " + current.ActiveScene);
+    }
+
     double speed = Math.Sqrt((current.xVel * current.xVel) + (current.yVel * current.yVel));
     current.Speed = speed;
 
     timer.Run.Metadata.SetCustomVariable("Speed", speed.ToString("F1"));
+
+    // 尚未快取成功 -> 每幀重試一次，直到抓到為止
+    if ((IntPtr)vars.StaticField == IntPtr.Zero)
+    {
+        vars.TryCacheManager();
+    }
+
+    // 已快取 -> 每幀只重新讀取 mission (因為要進關卡才會生成)
+    if ((IntPtr)vars.StaticField != IntPtr.Zero)
+    {
+        IntPtr staticField = (IntPtr)vars.StaticField;
+        IntPtr mission = vars.GetManagerMissions(staticField);
+
+        current.MissionPtr = mission;
+        current.AllObjectivesAccomplished = vars.CheckAllObjectivesAccomplished(mission);
+    }
 }
 
 gameTime
@@ -171,6 +271,16 @@ gameTime
             return TimeSpan.FromSeconds(seconds);
         }
     }
+}
+
+start
+{
+    return current.Agent != old.Agent && current.Agent != IntPtr.Zero;
+}
+
+split
+{
+    return current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
 }
 
 isLoading
