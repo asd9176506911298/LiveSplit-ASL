@@ -4,6 +4,11 @@ state("Agent 64 Spies Never Die")
     ulong gom: "UnityPlayer.dll", 0x1A24818; 
 }
 
+startup
+{
+    Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
+}
+
 init
 {
     // 緩存變數初始化
@@ -121,6 +126,20 @@ init
         if (managedObjPtr == IntPtr.Zero) return 0.0;
         return game.ReadValue<double>(managedObjPtr + 0x20);
     });
+
+    vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
+    vars.Instance.Watch<float>("xVel", "Agent", "0xE0", "0x48");
+    vars.Instance.Watch<float>("yVel", "Agent", "0xE0", "0x50");
+}
+
+update
+{
+    vars.Uhara.Update();
+
+    double speed = Math.Sqrt((current.xVel * current.xVel) + (current.yVel * current.yVel));
+    current.Speed = speed;
+
+    timer.Run.Metadata.SetCustomVariable("Speed", speed.ToString("F1"));
 }
 
 gameTime
