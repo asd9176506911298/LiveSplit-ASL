@@ -16,6 +16,13 @@ init
     vars.ManagerComponent = IntPtr.Zero;
     vars.StaticField = IntPtr.Zero;
 
+    // === Full Run 用：跨關卡累計秒數 ===
+    vars.AccumulatedSeconds = 0.0;
+
+    // 預先在 current 上建立這個欄位，讓 init -> old 複製時就已經存在，
+    // 避免第一次 update 執行時 old.RawLevelSeconds 找不到而丟例外
+    current.RawLevelSeconds = 0.0;
+
     // 1. 讀取雙向鏈結串列 (x64 BaseLinkedListNode: +0x00 Next, +0x08 BaseObject*)
     vars.ReadGameObjectList = (Func<IntPtr, List<IntPtr>>)(listHeadPtr => 
     {
@@ -198,6 +205,42 @@ init
         return true;
     });
 
+    // 9. === Full Run 用：抽出來的「讀取當前關卡原始秒數」共用函式 ===
+    //    邏輯跟原本 gameTime 一樣，只是不含累計，單純回傳「這一關」的原始秒數
+    vars.GetRawChronoSeconds = (Func<double>)(() =>
+    {
+        IntPtr cachedPtr = (IntPtr)(vars.CachedTimerManaged ?? IntPtr.Zero);
+
+        if (cachedPtr == IntPtr.Zero)
+        {
+            IntPtr chronoGo = vars.FindGameObject("Chrono (TMP)");
+            if (chronoGo != IntPtr.Zero)
+            {
+                cachedPtr = vars.GetComponentByIndex(chronoGo, 3);
+                vars.CachedTimerManaged = cachedPtr;
+            }
+        }
+
+        if (cachedPtr != IntPtr.Zero)
+        {
+            IntPtr classRegPtr = game.ReadPointer(cachedPtr + 0x00);
+            if (classRegPtr == IntPtr.Zero)
+            {
+                // 物件已失效(換場景/換關)，清掉快取，等下一幀重新尋找
+                vars.CachedTimerManaged = IntPtr.Zero;
+                return -1.0; // 用 -1 代表「這一幀讀不到，沿用上一次值」
+            }
+
+            double seconds = vars.GetInGameTime(cachedPtr);
+            if (seconds >= 0)
+            {
+                return seconds;
+            }
+        }
+
+        return -1.0;
+    });
+
     vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
     vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
 
@@ -240,37 +283,17 @@ update
         current.MissionPtr = mission;
         current.AllObjectivesAccomplished = vars.CheckAllObjectivesAccomplished(mission);
     }
+
+    // === Full Run 用：每幀讀一次「這一關」的原始秒數 ===
+    // 讀不到時 (-1) 就沿用上一幀的值，避免瞬間跳成 0 造成計時抖動
+    double rawSeconds = vars.GetRawChronoSeconds();
+    current.RawLevelSeconds = rawSeconds >= 0 ? rawSeconds : old.RawLevelSeconds;
 }
 
 gameTime
 {
-    IntPtr cachedPtr = (IntPtr)(vars.CachedTimerManaged ?? IntPtr.Zero);
-
-    if (cachedPtr == IntPtr.Zero)
-    {
-        IntPtr chronoGo = vars.FindGameObject("Chrono (TMP)");
-        if (chronoGo != IntPtr.Zero)
-        {
-            cachedPtr = vars.GetComponentByIndex(chronoGo, 3);
-            vars.CachedTimerManaged = cachedPtr;
-        }
-    }
-
-    if (cachedPtr != IntPtr.Zero)
-    {
-        IntPtr classRegPtr = game.ReadPointer(cachedPtr + 0x00);
-        if (classRegPtr == IntPtr.Zero)
-        {
-            vars.CachedTimerManaged = IntPtr.Zero;
-            return null;
-        }
-
-        double seconds = vars.GetInGameTime(cachedPtr);
-        if (seconds >= 0)
-        {
-            return TimeSpan.FromSeconds(seconds);
-        }
-    }
+    // === Full Run 用：累計秒數 + 這一關的秒數 ===
+    return TimeSpan.FromSeconds(vars.AccumulatedSeconds + current.RawLevelSeconds);
 }
 
 start
@@ -280,7 +303,30 @@ start
 
 split
 {
-    return current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
+    bool shouldSplit = current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
+
+    if (shouldSplit)
+    {
+        // 把這一關的秒數併入累計，下一關繼續往上加
+        vars.AccumulatedSeconds += current.RawLevelSeconds;
+
+        // 關鍵：把這一幀的 RawLevelSeconds 歸零，
+        // 避免同一個 tick 裡緊接著執行的 gameTime() 把這一關的秒數重複加一次
+        current.RawLevelSeconds = 0.0;
+
+        // 清掉 Chrono 快取，讓下一關重新去抓新的計時器物件
+        vars.CachedTimerManaged = IntPtr.Zero;
+
+        print("[FullRun] Level cleared. Accumulated: " + vars.AccumulatedSeconds.ToString("F3") + "s");
+    }
+
+    return shouldSplit;
+}
+
+onReset
+{
+    // 計時器被重置(手動或自動)時，把累計秒數歸零，準備下一次 Full Run
+    vars.AccumulatedSeconds = 0.0;
 }
 
 isLoading
