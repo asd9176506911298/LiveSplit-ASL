@@ -274,14 +274,19 @@ update
         vars.TryCacheManager();
     }
 
-    // 已快取 -> 每幀只重新讀取 mission (因為要進關卡才會生成)
-    if ((IntPtr)vars.StaticField != IntPtr.Zero)
+    if ((IntPtr)vars.StaticField != IntPtr.Zero && (IntPtr)current.Agent != IntPtr.Zero)
     {
         IntPtr staticField = (IntPtr)vars.StaticField;
         IntPtr mission = vars.GetManagerMissions(staticField);
 
         current.MissionPtr = mission;
         current.AllObjectivesAccomplished = vars.CheckAllObjectivesAccomplished(mission);
+    }
+    else
+    {
+        // 不在關卡內 (在選關/主選單)，強制歸零，避免殘留記憶體造成假觸發
+        current.MissionPtr = IntPtr.Zero;
+        current.AllObjectivesAccomplished = false;
     }
 
     // === Full Run 用：每幀讀一次「這一關」的原始秒數 ===
@@ -303,19 +308,13 @@ start
 
 split
 {
-    bool shouldSplit = current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
+    bool inLevel = (IntPtr)current.Agent != IntPtr.Zero;
+    bool shouldSplit = inLevel && current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
 
     if (shouldSplit)
     {
-        // 把這一關的秒數併入累計，下一關繼續往上加
         vars.AccumulatedSeconds += current.RawLevelSeconds;
-
-        // 關鍵：把這一幀的 RawLevelSeconds 歸零，
-        // 避免同一個 tick 裡緊接著執行的 gameTime() 把這一關的秒數重複加一次
         current.RawLevelSeconds = 0.0;
-
-        // 清掉 Chrono 快取，讓下一關重新去抓新的計時器物件
-        vars.CachedTimerManaged = IntPtr.Zero;
 
         print("[FullRun] Level cleared. Accumulated: " + vars.AccumulatedSeconds.ToString("F3") + "s");
     }
@@ -325,8 +324,9 @@ split
 
 onReset
 {
-    // 計時器被重置(手動或自動)時，把累計秒數歸零，準備下一次 Full Run
     vars.AccumulatedSeconds = 0.0;
+    current.MissionPtr = IntPtr.Zero;
+    current.AllObjectivesAccomplished = false;
 }
 
 isLoading
