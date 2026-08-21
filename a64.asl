@@ -308,8 +308,10 @@ start
 
 split
 {
-    bool inLevel = (IntPtr)current.Agent != IntPtr.Zero;
-    bool shouldSplit = inLevel && current.AllObjectivesAccomplished && !old.AllObjectivesAccomplished;
+    // 增加了场景名称的判断：非标题/菜单场景才允许 split
+    bool shouldSplit = current.AllObjectivesAccomplished 
+        && !old.AllObjectivesAccomplished 
+        && current.ActiveScene != "snd_titre_agent";
 
     if (shouldSplit)
     {
