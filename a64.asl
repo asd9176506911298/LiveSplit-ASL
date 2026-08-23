@@ -1,6 +1,5 @@
 state("Agent 64 Spies Never Die")
 {
-    // 64-bit UnityPlayer.dll -> GameObjectManager 指針
     ulong gom: "UnityPlayer.dll", 0x1A24818; 
 }
 
@@ -11,19 +10,17 @@ startup
 
 init
 {
-    // 緩存變數初始化
     vars.CachedTimerManaged = IntPtr.Zero;
     vars.ManagerComponent = IntPtr.Zero;
     vars.StaticField = IntPtr.Zero;
 
-    // === Full Run 用：跨關卡累計秒數 ===
     vars.AccumulatedSeconds = 0.0;
+    vars.LevelRetryAccumulated = 0.0;
+    vars.HasSpawnedThisLevel = false; // 這一關是否已經生成過一次角色
 
-    // 預先在 current 上建立這個欄位，讓 init -> old 複製時就已經存在，
-    // 避免第一次 update 執行時 old.RawLevelSeconds 找不到而丟例外
     current.RawLevelSeconds = 0.0;
+    current.MissionPtr = IntPtr.Zero;
 
-    // 1. 讀取雙向鏈結串列 (x64 BaseLinkedListNode: +0x00 Next, +0x08 BaseObject*)
     vars.ReadGameObjectList = (Func<IntPtr, List<IntPtr>>)(listHeadPtr => 
     {
         var gameObjects = new List<IntPtr>();
@@ -50,7 +47,6 @@ init
         return gameObjects;
     });
 
-    // 2. 讀取 GameObject 名稱 (x64: GameObject + 0x60 -> m_Name)
     vars.GetGameObjectName = (Func<IntPtr, string>)(goPtr => 
     {
         if (goPtr == IntPtr.Zero) return "";
@@ -61,7 +57,6 @@ init
         return game.ReadString(namePtr, 128) ?? "";
     });
 
-    // 3. 根據名稱搜尋目標 GameObject*
     vars.FindGameObject = (Func<string, IntPtr>)(targetName => 
     {
         IntPtr gomPtr = (IntPtr)current.gom;
@@ -88,29 +83,12 @@ init
         return IntPtr.Zero; 
     });
 
-    // 4. Native Object -> Managed C# Object* (+0x28)
     vars.GetManagedObject = (Func<IntPtr, IntPtr>)(nativeObjPtr => 
     {
         if (nativeObjPtr == IntPtr.Zero) return IntPtr.Zero;
-
         return game.ReadPointer(nativeObjPtr + 0x28);
     });
 
-    // 5. 從 Managed Object 讀取 Class Name
-    vars.GetClassName = (Func<IntPtr, string>)(managedObjPtr => 
-    {
-        if (managedObjPtr == IntPtr.Zero) return "";
-
-        IntPtr classRegPtr = game.ReadPointer(managedObjPtr + 0x00);
-        if (classRegPtr == IntPtr.Zero) return "";
-
-        IntPtr namePtr = game.ReadPointer(classRegPtr + 0x10);
-        if (namePtr == IntPtr.Zero) return "";
-
-        return game.ReadString(namePtr, 128) ?? "";
-    });
-
-    // 6. 依 Index (0-based) 取得 GameObject 上的 Component Managed Object*
     vars.GetComponentByIndex = (Func<IntPtr, int, IntPtr>)((goPtr, index) => 
     {
         if (goPtr == IntPtr.Zero || index < 0) 
@@ -129,7 +107,6 @@ init
         return vars.GetManagedObject(componentPtr);
     });
 
-    // 7. 讀取 IGT Helper
     vars.GetInGameTime = (Func<IntPtr, double>)(managedObjPtr => 
     {
         if (managedObjPtr == IntPtr.Zero) return 0.0;
@@ -139,14 +116,12 @@ init
     vars.GetStaticFields = (Func<IntPtr, IntPtr>)(nativeObjPtr => 
     {
         if (nativeObjPtr == IntPtr.Zero) return IntPtr.Zero;
-
         return game.ReadPointer(nativeObjPtr + 0xB8);
     });
 
     vars.GetManagerMissions = (Func<IntPtr, IntPtr>)(nativeObjPtr => 
     {
         if (nativeObjPtr == IntPtr.Zero) return IntPtr.Zero;
-
         return game.ReadPointer(nativeObjPtr + 0x50);
     });
 
@@ -154,34 +129,33 @@ init
     {
         if (missionPtr == IntPtr.Zero) return false;
 
-        IntPtr listPtr = game.ReadPointer(missionPtr + 0x48); // List<Objective>
+        IntPtr listPtr = game.ReadPointer(missionPtr + 0x48);
         if (listPtr == IntPtr.Zero) return false;
 
-        IntPtr itemsArrayPtr = game.ReadPointer(listPtr + 0x10); // _items
-        int size = game.ReadValue<int>(listPtr + 0x18);          // _size
+        IntPtr itemsArrayPtr = game.ReadPointer(listPtr + 0x10);
+        int size = game.ReadValue<int>(listPtr + 0x18);
 
         if (itemsArrayPtr == IntPtr.Zero || size <= 0) return false;
 
-        bool hasValidObjective = false; // 用來確保至少有一個有效 Objective 被檢查過
+        bool hasValidObjective = false;
 
         for (int i = 0; i < size; i++)
         {
             IntPtr objPtr = game.ReadPointer(itemsArrayPtr + 0x20 + (i * 0x8));
-            if (objPtr == IntPtr.Zero) continue; // 空指標直接跳過，不影響判定
+            if (objPtr == IntPtr.Zero) continue;
 
-            int currentNumber = game.ReadValue<int>(objPtr + 0x34); // Objective.CurrentNumber
-            if (currentNumber == 0) continue; // CurrentNumber == 0 -> 跳過此 Objective
+            int currentNumber = game.ReadValue<int>(objPtr + 0x34);
+            if (currentNumber == 0) continue;
 
-            bool accomplished = game.ReadValue<bool>(objPtr + 0x30); // Objective.Accomplished
+            bool accomplished = game.ReadValue<bool>(objPtr + 0x30);
             hasValidObjective = true;
 
-            if (!accomplished) return false; // 只要有一個「有效且未完成」就不算
+            if (!accomplished) return false;
         }
 
-        return hasValidObjective; // 全部有效的都 Accomplished == true 才回傳 true
+        return hasValidObjective;
     });
 
-    // 8. 嘗試快取 managerComponent + staticField (只需成功一次)
     vars.TryCacheManager = (Func<bool>)(() =>
     {
         IntPtr managerObj = vars.FindGameObject("~CodexRPG");
@@ -205,8 +179,6 @@ init
         return true;
     });
 
-    // 9. === Full Run 用：抽出來的「讀取當前關卡原始秒數」共用函式 ===
-    //    邏輯跟原本 gameTime 一樣，只是不含累計，單純回傳「這一關」的原始秒數
     vars.GetRawChronoSeconds = (Func<double>)(() =>
     {
         IntPtr cachedPtr = (IntPtr)(vars.CachedTimerManaged ?? IntPtr.Zero);
@@ -226,9 +198,8 @@ init
             IntPtr classRegPtr = game.ReadPointer(cachedPtr + 0x00);
             if (classRegPtr == IntPtr.Zero)
             {
-                // 物件已失效(換場景/換關)，清掉快取，等下一幀重新尋找
                 vars.CachedTimerManaged = IntPtr.Zero;
-                return -1.0; // 用 -1 代表「這一幀讀不到，沿用上一次值」
+                return -1.0;
             }
 
             double seconds = vars.GetInGameTime(cachedPtr);
@@ -248,7 +219,6 @@ init
     vars.Instance.Watch<float>("xVel", "Agent", "0xE0", "0x48");
     vars.Instance.Watch<float>("yVel", "Agent", "0xE0", "0x50");
 
-    // 先嘗試抓一次 (若此時遊戲已在場景中)
     vars.TryCacheManager();
 }
 
@@ -258,17 +228,15 @@ update
 
     current.ActiveScene = vars.Utils.GetActiveSceneName() ?? current.ActiveScene;
 
-    if(current.ActiveScene != old.ActiveScene)
+    if (current.ActiveScene != old.ActiveScene)
     {
         print("old.ActiveScene: " + old.ActiveScene + " - > current.ActiveScene: " + current.ActiveScene);
     }
 
     double speed = Math.Sqrt((current.xVel * current.xVel) + (current.yVel * current.yVel));
     current.Speed = speed;
-
     timer.Run.Metadata.SetCustomVariable("Speed", speed.ToString("F1"));
 
-    // 尚未快取成功 -> 每幀重試一次，直到抓到為止
     if ((IntPtr)vars.StaticField == IntPtr.Zero)
     {
         vars.TryCacheManager();
@@ -284,21 +252,31 @@ update
     }
     else
     {
-        // 不在關卡內 (在選關/主選單)，強制歸零，避免殘留記憶體造成假觸發
         current.MissionPtr = IntPtr.Zero;
         current.AllObjectivesAccomplished = false;
     }
 
-    // === Full Run 用：每幀讀一次「這一關」的原始秒數 ===
-    // 讀不到時 (-1) 就沿用上一幀的值，避免瞬間跳成 0 造成計時抖動
     double rawSeconds = vars.GetRawChronoSeconds();
+
+    // 用 Agent「從 0 變成非 0」判斷是否為一次新的嘗試 (死亡重生 / 手動 Retry)
+    if (current.Agent != IntPtr.Zero && old.Agent == IntPtr.Zero)
+    {
+        if (vars.HasSpawnedThisLevel)
+        {
+            vars.LevelRetryAccumulated += old.RawLevelSeconds;
+            print("[Retry Detected] Agent respawned: " + ((IntPtr)current.Agent).ToString("X")
+                + "  Banked " + old.RawLevelSeconds.ToString("F3")
+                + "s. LevelRetryAccumulated: " + vars.LevelRetryAccumulated.ToString("F3") + "s");
+        }
+        vars.HasSpawnedThisLevel = true;
+    }
+
     current.RawLevelSeconds = rawSeconds >= 0 ? rawSeconds : old.RawLevelSeconds;
 }
 
 gameTime
 {
-    // === Full Run 用：累計秒數 + 這一關的秒數 ===
-    return TimeSpan.FromSeconds(vars.AccumulatedSeconds + current.RawLevelSeconds);
+    return TimeSpan.FromSeconds(vars.AccumulatedSeconds + vars.LevelRetryAccumulated + current.RawLevelSeconds);
 }
 
 start
@@ -308,15 +286,16 @@ start
 
 split
 {
-    // 增加了场景名称的判断：非标题/菜单场景才允许 split
     bool shouldSplit = current.AllObjectivesAccomplished 
         && !old.AllObjectivesAccomplished 
         && current.ActiveScene != "snd_titre_agent";
 
     if (shouldSplit)
     {
-        vars.AccumulatedSeconds += current.RawLevelSeconds;
+        vars.AccumulatedSeconds += vars.LevelRetryAccumulated + current.RawLevelSeconds;
+        vars.LevelRetryAccumulated = 0.0;
         current.RawLevelSeconds = 0.0;
+        vars.HasSpawnedThisLevel = false; // 只有真正過關才重置
 
         print("[FullRun] Level cleared. Accumulated: " + vars.AccumulatedSeconds.ToString("F3") + "s");
     }
@@ -327,6 +306,8 @@ split
 onReset
 {
     vars.AccumulatedSeconds = 0.0;
+    vars.LevelRetryAccumulated = 0.0;
+    vars.HasSpawnedThisLevel = false;
     current.MissionPtr = IntPtr.Zero;
     current.AllObjectivesAccomplished = false;
 }
