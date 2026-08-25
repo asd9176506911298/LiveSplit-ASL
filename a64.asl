@@ -18,6 +18,8 @@ init
     vars.LevelRetryAccumulated = 0.0;
     vars.HasSpawnedThisLevel = false; // 這一關是否已經生成過一次角色
 
+    vars.LevelBaseline = 0.0; // 上一次銀行(Retry或過關)那一刻的 raw 值，在底層計時器真的清 0 之前，用來扣除避免重複計算
+
     current.RawLevelSeconds = 0.0;
     current.MissionPtr = IntPtr.Zero;
 
@@ -216,6 +218,7 @@ init
     vars.Utils = vars.Uhara.CreateTool("Unity", "Utils");
 
     vars.Instance.Watch<IntPtr>("Agent", "Agent");
+    vars.Instance.Watch<byte>("startFlag", "Agent", "0x121");
     vars.Instance.Watch<float>("xVel", "Agent", "0xE0", "0x48");
     vars.Instance.Watch<float>("yVel", "Agent", "0xE0", "0x50");
 
@@ -263,25 +266,44 @@ update
     {
         if (vars.HasSpawnedThisLevel)
         {
-            vars.LevelRetryAccumulated += old.RawLevelSeconds;
+            // 扣掉 baseline，避免 Agent 指標短暫閃爍 (歸零又非零) 但底層計時器還沒真的清 0 時，重複銀行同一段時間
+            double bankedAmount = old.RawLevelSeconds - vars.LevelBaseline;
+            if (bankedAmount < 0) bankedAmount = 0;
+
+            vars.LevelRetryAccumulated += bankedAmount;
+
+            // 立刻把 baseline 設成這次銀行後的 raw 值
+            // 如果緊接著又觸發一次「假的」Retry 偵測 (底層計時器還沒真的清 0)，(raw - baseline) 會是 0，不會重複銀行
+            vars.LevelBaseline = old.RawLevelSeconds;
+
             print("[Retry Detected] Agent respawned: " + ((IntPtr)current.Agent).ToString("X")
-                + "  Banked " + old.RawLevelSeconds.ToString("F3")
+                + "  Banked " + bankedAmount.ToString("F3")
                 + "s. LevelRetryAccumulated: " + vars.LevelRetryAccumulated.ToString("F3") + "s");
         }
         vars.HasSpawnedThisLevel = true;
     }
 
     current.RawLevelSeconds = rawSeconds >= 0 ? rawSeconds : old.RawLevelSeconds;
+
+    // 偵測底層計時器真的清 0 過（進入下一次嘗試/下一關後 raw 值會掉到 baseline 以下）
+    if (rawSeconds >= 0 && rawSeconds < vars.LevelBaseline)
+    {
+        vars.LevelBaseline = 0.0;
+        print("[Baseline Cleared] raw=" + rawSeconds.ToString("F3"));
+    }
 }
 
 gameTime
 {
-    return TimeSpan.FromSeconds(vars.AccumulatedSeconds + vars.LevelRetryAccumulated + current.RawLevelSeconds);
+    double levelSeconds = current.RawLevelSeconds - vars.LevelBaseline;
+    if (levelSeconds < 0) levelSeconds = 0;
+
+    return TimeSpan.FromSeconds(vars.AccumulatedSeconds + vars.LevelRetryAccumulated + levelSeconds);
 }
 
 start
 {
-    return current.Agent != old.Agent && current.Agent != IntPtr.Zero;
+    return old.startFlag == 0 && current.startFlag == 1;
 }
 
 split
@@ -292,12 +314,20 @@ split
 
     if (shouldSplit)
     {
-        vars.AccumulatedSeconds += vars.LevelRetryAccumulated + current.RawLevelSeconds;
+        double levelSeconds = current.RawLevelSeconds - vars.LevelBaseline;
+        if (levelSeconds < 0) levelSeconds = 0;
+
+        vars.AccumulatedSeconds += vars.LevelRetryAccumulated + levelSeconds;
         vars.LevelRetryAccumulated = 0.0;
-        current.RawLevelSeconds = 0.0;
+
+        // 立刻把 baseline 設成過關那一刻的 raw 值
+        // 在 Mission Success 畫面停留、底層計時器還沒真的清 0 之前，(raw - baseline) 一律是 0，不會重複累加
+        vars.LevelBaseline = current.RawLevelSeconds;
+
         vars.HasSpawnedThisLevel = false; // 只有真正過關才重置
 
-        print("[FullRun] Level cleared. Accumulated: " + vars.AccumulatedSeconds.ToString("F3") + "s");
+        print("[FullRun] Level cleared. Banked " + levelSeconds.ToString("F3")
+            + "s. Accumulated: " + vars.AccumulatedSeconds.ToString("F3") + "s");
     }
 
     return shouldSplit;
@@ -308,6 +338,7 @@ onReset
     vars.AccumulatedSeconds = 0.0;
     vars.LevelRetryAccumulated = 0.0;
     vars.HasSpawnedThisLevel = false;
+    vars.LevelBaseline = 0.0;
     current.MissionPtr = IntPtr.Zero;
     current.AllObjectivesAccomplished = false;
 }
