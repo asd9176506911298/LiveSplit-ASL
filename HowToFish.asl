@@ -7,6 +7,7 @@ init
 {
     // Global variable initialization
     vars.blackScreenImage = IntPtr.Zero;
+    vars.endGameCanvasBackgroundImage = IntPtr.Zero;   // 新增
 
     // 1. Get GameObject name (+0x50)
     vars.GetGameObjectName = (Func<IntPtr, string>)(goPtr => 
@@ -159,6 +160,15 @@ init
             print("[ASL] Successfully retrieved BlackScreen Image address: " + ((IntPtr)vars.blackScreenImage).ToString("X"));
         }
     }
+
+    var CanvasHolder = vars.FindGameObject("CanvasHolder");
+    var CanvasHolderTransform = vars.GetTransform(CanvasHolder);
+    var EndGameCanvas = vars.GetChildByName(CanvasHolderTransform, "EndGameCanvas (To toggle)");
+    var EndGameCanvasTransform = vars.GetTransform(EndGameCanvas);
+    var EndGameCanvasBackground = vars.GetChildByName(EndGameCanvasTransform, "Background");
+    vars.endGameCanvasBackgroundImage = vars.GetComponentByIndex(EndGameCanvasBackground, 2);   // 保存到 vars
+
+    print("[ASL] EndGameCanvasBackgroundImage address: " + ((IntPtr)vars.endGameCanvasBackgroundImage).ToString("X"));
 }
 
 update
@@ -178,10 +188,26 @@ update
         }
     }
 
+    // Retry once for EndGameCanvasBackgroundImage in case it wasn't ready at init
+    if (vars.endGameCanvasBackgroundImage == IntPtr.Zero)
+    {
+        var CanvasHolder = vars.FindGameObject("CanvasHolder");
+        var CanvasHolderTransform = vars.GetTransform(CanvasHolder);
+        var EndGameCanvas = vars.GetChildByName(CanvasHolderTransform, "EndGameCanvas (To toggle)");
+        var EndGameCanvasTransform = vars.GetTransform(EndGameCanvas);
+        var EndGameCanvasBackground = vars.GetChildByName(EndGameCanvasTransform, "Background");
+        vars.endGameCanvasBackgroundImage = vars.GetComponentByIndex(EndGameCanvasBackground, 2);
+    }
+
     // Write current alpha to current.Alpha for old/new comparison in the start block
     current.Alpha = (vars.blackScreenImage != IntPtr.Zero) 
         ? vars.GetAlpha(vars.blackScreenImage) 
         : 1.0f;
+
+    // Write current EndGameCanvasBackgroundImage alpha for the split block
+    current.EndGameAlpha = (vars.endGameCanvasBackgroundImage != IntPtr.Zero)
+        ? vars.GetAlpha(vars.endGameCanvasBackgroundImage)
+        : 0.0f;
 }
 
 start
@@ -190,6 +216,18 @@ start
     if (old.Alpha == 1.0f && current.Alpha < 1.0f)
     {
         print("[ASL] Start Triggered! Alpha decreased from 1.0 to " + current.Alpha);
+        return true;
+    }
+
+    return false;
+}
+
+split
+{
+    // Trigger condition: Previous frame EndGameAlpha == 0 (fully invisible), and current frame EndGameAlpha starts increasing (> 0)
+    if (old.EndGameAlpha == 0.0f && current.EndGameAlpha > 0.0f)
+    {
+        print("[ASL] Split Triggered! EndGameAlpha increased from 0 to " + current.EndGameAlpha);
         return true;
     }
 
