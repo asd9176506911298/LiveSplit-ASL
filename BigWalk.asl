@@ -58,16 +58,43 @@ init
     vars.Instance.Watch<IntPtr>("PropHomes", "PropHome", "allPropHomes", "_items");
     vars.Instance.Watch<int>("PropHomeCount", "PropHome", "allPropHomes", "_size");
 
-    // ===== JitSave hook: capture newValue (r8) from OnChangeGourdState(oldValue, newValue) =====
+    int[] pinGroupResult   = vars.Instance.GetPathInt("PropHome", "pinGroup");
+    int[] pinnedPropResult = vars.Instance.GetPathInt("PropHome", "pinnedProp");
+    int[] homeNameResult   = vars.Instance.GetPathInt("PropHome", "saveableHomeName");
+
+    bool allResolved = pinGroupResult != null && pinGroupResult.Length == 1
+                     && pinnedPropResult != null && pinnedPropResult.Length == 1
+                     && homeNameResult != null && homeNameResult.Length == 1;
+
+    if (allResolved)
+    {
+        vars.OffsetPinGroup   = pinGroupResult[0];
+        vars.OffsetPinnedProp = pinnedPropResult[0];
+        vars.OffsetHomeName   = homeNameResult[0];
+
+        print("[BigWalk] Offset resolve SUCCESS: pinGroup=0x" + pinGroupResult[0].ToString("X")
+            + " pinnedProp=0x" + pinnedPropResult[0].ToString("X")
+            + " homeName=0x" + homeNameResult[0].ToString("X"));
+    }
+    else
+    {
+        vars.OffsetPinGroup   = 0x60;
+        vars.OffsetPinnedProp = 0xD8;
+        vars.OffsetHomeName   = 0x98;
+
+        print("[BigWalk] Offset resolve FAILED, using fallback offsets.");
+        print("[BigWalk] pinGroup: " + (pinGroupResult == null ? "NULL" : "0x" + pinGroupResult[0].ToString("X")));
+        print("[BigWalk] pinnedProp: " + (pinnedPropResult == null ? "NULL" : "0x" + pinnedPropResult[0].ToString("X")));
+        print("[BigWalk] saveableHomeName: " + (homeNameResult == null ? "NULL" : "0x" + homeNameResult[0].ToString("X")));
+    }
+
+    vars.FilledHomes = null;
+
+    // ===== JitSave hook =====
     vars.JitSave = vars.Uhara.CreateTool("Unity", "IL2CPP", "JitSave");
-
-    // "mov [rip-8], r8" — captures newValue (rdx/oldValue is already destroyed by this offset, r8/newValue survives intact)
     byte[] AsmMovR8RelativeStorage = new byte[] { 0x4C, 0x89, 0x05, 0xF1, 0xFF, 0xFF, 0xFF, 0x90 };
-
     IntPtr pGourdNewState = vars.JitSave.Add("Assembly-CSharp", "", "RewardGourd", "OnChangeGourdState", 2, 11, 0, AsmMovR8RelativeStorage);
-
     vars.Resolver.Watch<int>("gourdNewState", pGourdNewState);
-
     vars.JitSave.ProcessQueue();
 }
 
@@ -78,6 +105,10 @@ update
     if (current.PropHomes == IntPtr.Zero || current.PropHomeCount <= 0)
         return;
 
+    int offPinGroup = (int)vars.OffsetPinGroup;
+    int offPinnedProp = (int)vars.OffsetPinnedProp;
+    int offHomeName = (int)vars.OffsetHomeName;
+
     var filledHomes = new HashSet<int>();
 
     for (int i = 0; i < current.PropHomeCount; i++)
@@ -86,13 +117,13 @@ update
         IntPtr propHomePtr = game.ReadPointer(entryAddr);
         if (propHomePtr == IntPtr.Zero) continue;
 
-        int pinGroup = game.ReadValue<int>(propHomePtr + 0x60);
+        int pinGroup = game.ReadValue<int>(propHomePtr + offPinGroup);
         if (pinGroup != vars.RewardGourd) continue;
 
-        IntPtr pinnedProp = game.ReadPointer(propHomePtr + 0xD0);
+        IntPtr pinnedProp = game.ReadPointer(propHomePtr + offPinnedProp);
         if (pinnedProp == IntPtr.Zero) continue;
 
-        int homeName = game.ReadValue<int>(propHomePtr + 0x98);
+        int homeName = game.ReadValue<int>(propHomePtr + offHomeName);
         filledHomes.Add(homeName);
     }
 
