@@ -8,7 +8,7 @@ startup
     settings.Add("playercount", true, "Target Player Count (start when lobby reaches this many)");
     for (int i = 1; i <= 12; i++)
     {
-        settings.Add("p" + i, i == 4, i + (i == 1 ? " Player" : " Players"), "playercount");
+        settings.Add("p" + i, i == 1, i + (i == 1 ? " Player" : " Players"), "playercount");
     }
 }
 
@@ -23,7 +23,7 @@ init
     // (settings is read-only outside of "startup", so we can't uncheck the others -
     //  we just track the most recently checked one and use that as the selection)
     vars.PrevChecked = new bool[13];
-    vars.SelectedCount = 4;
+    vars.SelectedCount = 1;
     for (int i = 1; i <= 12; i++)
     {
         bool isChecked = (bool)settings["p" + i];
