@@ -251,8 +251,15 @@ init
     vars.OffPlayerId = vars.OffCurrentPeckContext + GetOff("PeckContext", "playerIdentity") - 0x10; // 0x38
     vars.OffIsLocal = GetOff("Mirror:Mirror:NetworkIdentity", "<isLocalPlayer>k__BackingField");
 
+    // ===== Ready-check offsets (all players not pending) =====
+    vars.OffPlayerNetworking = GetOff("PlayerCharacter", "playerNetworking");
+    vars.OffIsPending = GetOff("PlayerNetworking", "isPending");
+    
     vars.PuzzleShouldSplit = false;
     vars.FilledHomes = null;
+
+    vars.IsAllReady = false;
+    vars.ReadyTriggered = false;
 }
 
 update
@@ -326,6 +333,41 @@ update
     if (current.PlayerCount != old.PlayerCount)
         print("PlayerCount: " + current.PlayerCount.ToString());
 
+    // ===== Ready check: lobby reached chosen count AND all players isPending == false =====
+    bool currentReady = false;
+    if ((IntPtr)current.allPlayers != IntPtr.Zero && current.PlayerCount == (int)vars.SelectedCount)
+    {
+        bool allPlayersAreReady = true;
+        for (int i = 0; i < current.PlayerCount; i++)
+        {
+            IntPtr entryAddr = game.ReadPointer((IntPtr)current.allPlayers + 0x20 + i * 0x8);
+            if (entryAddr == IntPtr.Zero) { allPlayersAreReady = false; break; }
+
+            IntPtr playerNetworking = game.ReadPointer((IntPtr)(entryAddr + vars.OffPlayerNetworking));
+            if (playerNetworking == IntPtr.Zero) { allPlayersAreReady = false; break; }
+
+            bool isPending = game.ReadValue<bool>((IntPtr)(playerNetworking + vars.OffIsPending));
+            if (isPending)
+            {
+                allPlayersAreReady = false;
+                break;
+            }
+        }
+        currentReady = allPlayersAreReady;
+    }
+
+    if (currentReady && !vars.ReadyTriggered)
+    {
+        print(string.Format(">>> PlayerCount == {0} And All Player isPending is False <<<", vars.SelectedCount));
+        vars.ReadyTriggered = true;
+        vars.IsAllReady = true;
+    }
+    else if (!currentReady)
+    {
+        vars.ReadyTriggered = false;
+        vars.IsAllReady = false;
+    }
+
     if (current.PropHomes == IntPtr.Zero || current.PropHomeCount <= 0)
         return;
 
@@ -357,7 +399,13 @@ update
 start
 {
     // wait until the lobby has exactly the chosen number of connected players
-    return old.PlayerCount != current.PlayerCount && current.PlayerCount == (int)vars.SelectedCount;
+    // AND all of them have isPending == false
+    if (vars.IsAllReady)
+    {
+        vars.IsAllReady = false;
+        return true;
+    }
+    return false;
 }
 
 split
@@ -412,4 +460,5 @@ onReset
     vars.initialized.Clear();
     vars.CompletedGroups.Clear();
     vars.PuzzleShouldSplit = false;
+    vars.IsAllReady = false;
 }
