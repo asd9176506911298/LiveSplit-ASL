@@ -3,6 +3,7 @@ state("Big Walk"){}
 startup
 {
     Assembly.Load(File.ReadAllBytes("Components/uhara10")).CreateInstance("Main");
+    vars.Uhara.AlertLoadless();
 
     vars.RewardGourd = 19; // PropGroup.RewardGourd
 
@@ -58,6 +59,11 @@ init
 {
     vars.Instance = vars.Uhara.CreateTool("Unity", "IL2CPP", "Instance");
 
+    // vars.Instance.Watch<int>("entryMode", "MainMenuManager", "entryMode");
+    //                                                       klass->static_fields->entryMode
+    vars.Instance.Watch<int>("EntryMode", "MainMenuManager", "0x0", "0xB8", "0x8"); // entryMode
+    vars.Instance.Watch<int>("ConnState", "Mirror:Mirror:NetworkClient", "connectState");
+    vars.Instance.Watch<bool>("ServerActive", "Mirror:Mirror:NetworkServer", "<active>k__BackingField");
     vars.Instance.Watch<bool>("EndFlag", "MainMenuManager", "congratsMenu", "continueButton", "0x10", "0x20", "0x46");
     vars.Instance.Watch<IntPtr>("allPlayers", "PlayerCharacter", "allPlayerCharacters", "_items");
     vars.Instance.Watch<int>("PlayerCount", "PlayerCharacter", "allPlayerCharacters", "_size");
@@ -260,6 +266,9 @@ init
 
     vars.IsAllReady = false;
     vars.ReadyTriggered = false;
+    vars.IsPaused = false;
+    vars.NotReadySincePause = false;
+    vars.Ending = false;
 }
 
 update
@@ -368,6 +377,42 @@ update
         vars.IsAllReady = false;
     }
 
+    if (current.EntryMode == 2 && old.EntryMode != 2) vars.Ending = true;
+
+        // ===== Pause events =====
+    bool selfLeave   = old.ConnState == 2 && current.ConnState == 3;   // StopClient
+    bool passiveDisc = old.ConnState == 2 && current.ConnState == 4;   // client side: host closed the room
+    bool hostClosed  = old.ServerActive && !current.ServerActive;      // host side: server stopped
+    bool hostStop    = selfLeave && current.ServerActive;              // host side: StopClient while server still active
+
+    if (current.ConnState != old.ConnState)
+        print("ConnState: " + old.ConnState + " -> " + current.ConnState);
+
+    if (!vars.Ending && !vars.IsPaused && (passiveDisc || hostClosed || hostStop))
+    {
+        print(string.Format("Lobby closed, pausing timer (passiveDisc={0}, hostClosed={1}, hostStop={2})",
+            passiveDisc, hostClosed, hostStop));
+        vars.IsPaused = true;
+        vars.NotReadySincePause = false;
+    }
+    else if (selfLeave && !vars.IsPaused)
+    {
+        print("Client left by itself, timer keeps running");
+    }
+    else if (vars.IsPaused)
+    {
+        // Must see "not ready" first, then "ready again".
+        // Right after the disconnect the old player objects still exist for a frame,
+        // so currentReady can still be true and would resume immediately.
+        if (!currentReady) vars.NotReadySincePause = true;
+
+        if (vars.Ending || (vars.NotReadySincePause && currentReady))
+        {
+            print("Resuming timer");
+            vars.IsPaused = false;
+        }
+    }
+
     if (current.PropHomes == IntPtr.Zero || current.PropHomeCount <= 0)
         return;
 
@@ -454,6 +499,11 @@ split
     return false;
 }
 
+isLoading
+{
+    return vars.IsPaused;
+}
+
 onReset
 {
     vars.stateDict.Clear();
@@ -461,4 +511,7 @@ onReset
     vars.CompletedGroups.Clear();
     vars.PuzzleShouldSplit = false;
     vars.IsAllReady = false;
+    vars.IsPaused = false;
+    vars.Ending = false;
+    vars.NotReadySincePause = false;
 }
