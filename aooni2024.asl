@@ -138,3 +138,11 @@ split
 
     return false;
 }
+
+onReset
+{
+    foreach (var scene in vars.Scenes)
+    {
+        vars.SplitDone[scene] = false;
+    }
+}
